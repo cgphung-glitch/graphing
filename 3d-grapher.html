@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>3D Surface Plotter · explicit · implicit · parametric</title>
+<style>
+  :root{
+    --bg:            #14181c;
+    --bg-panel:      #1b2126;
+    --bg-panel-2:    #1f262b;
+    --grid-line:     rgba(214, 224, 226, 0.055);
+    --ink:           #dfe6e6;
+    --ink-dim:       #8ea0a3;
+    --ink-faint:     #5c6b6e;
+    --amber:         #e8a94a;
+    --amber-dim:     rgba(232,169,74,0.28);
+    --cyan:          #59c7c9;
+    --cyan-dim:      rgba(89,199,201,0.28);
+    --rule:          #303a3f;
+    --paper-hi:      rgba(255,255,255,0.02);
+    --err:           #e0685f;
+    --serif:         'Fraunces', 'Fraunhofer', Georgia, 'Times New Roman', serif;
+    --mono:          'JetBrains Mono', 'Courier New', ui-monospace, monospace;
+    --radius:        3px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--ink); font-family:var(--mono); -webkit-font-smoothing:antialiased; }
+  body {
+    background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 22px 22px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1000px; margin:0 auto; padding: clamp(14px, 3vw, 34px); }
+
+  header { border-bottom:1px solid var(--rule); padding-bottom:16px; margin-bottom:18px; display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .title-block h1 { font-family:var(--serif); font-weight:600; font-size:clamp(1.3rem, 2.6vw, 1.85rem); letter-spacing:0.2px; margin:0 0 4px 0; color:var(--ink); }
+  .title-block h1 em { font-style:italic; color:var(--amber); }
+  .title-block .sub { font-size:0.72rem; color:var(--ink-dim); letter-spacing:0.06em; text-transform:uppercase; }
+  .eyebrow { font-size:0.68rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-faint); border:1px solid var(--rule); padding:5px 9px; border-radius:var(--radius); white-space:nowrap; }
+
+  .panel { background:var(--bg-panel); border:1px solid var(--rule); border-radius:var(--radius); position:relative; }
+  .panel::before { content:""; position:absolute; inset:0; background:var(--paper-hi); pointer-events:none; border-radius:var(--radius); }
+
+  .eq-panel { padding:16px 18px; margin-bottom:14px; }
+  .field label { display:block; font-size:0.66rem; letter-spacing:0.09em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:7px; }
+  .field label .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  input[type="text"], input[type="number"] {
+    width:100%; background:var(--bg-panel-2); color:var(--ink); border:1px solid var(--rule); border-radius:var(--radius);
+    padding:10px 12px; font-family:var(--mono); font-size:0.95rem; letter-spacing:0.02em;
+  }
+  input:focus { outline:2px solid var(--amber); outline-offset:1px; }
+  input[disabled] { opacity:0.4; cursor:not-allowed; }
+  .err-msg { min-height:16px; font-size:0.68rem; color:var(--err); margin-top:6px; letter-spacing:0.01em; }
+
+  select {
+    width:100%; background:var(--bg-panel-2); color:var(--ink); border:1px solid var(--rule); border-radius:var(--radius);
+    padding:10px 12px; font-family:var(--mono); font-size:0.9rem; letter-spacing:0.02em; appearance:none; -webkit-appearance:none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--amber) 50%), linear-gradient(135deg, var(--amber) 50%, transparent 50%);
+    background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  select:focus { outline:2px solid var(--amber); outline-offset:1px; }
+
+  .mode-row { display:grid; grid-template-columns:1.5fr 1fr; gap:16px; margin-bottom:16px; }
+  @media (max-width:640px){ .mode-row { grid-template-columns:1fr; } }
+
+  .seg { display:flex; border:1px solid var(--rule); border-radius:var(--radius); overflow:hidden; }
+  .seg button {
+    flex:1; background:var(--bg-panel-2); color:var(--ink-dim); border:none; border-right:1px solid var(--rule);
+    padding:10px 8px; font-family:var(--mono); font-size:0.76rem; letter-spacing:0.02em; cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  .seg button:last-child { border-right:none; }
+  .seg button.active { color:var(--ink); background:#232b30; }
+  .seg button:hover { color:var(--ink); }
+
+  .eq-group { display:grid; grid-template-columns:1fr; gap:14px; }
+  .eq-group.triple { grid-template-columns:1fr 1fr 1fr; }
+  @media (max-width:760px){ .eq-group.triple { grid-template-columns:1fr; } }
+
+  .range-panel { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; padding:16px 18px; margin-bottom:14px; align-items:end; }
+  @media (max-width:760px){ .range-panel { grid-template-columns:1fr 1fr; } }
+  @media (max-width:460px){ .range-panel { grid-template-columns:1fr; } }
+  .range-pair { display:flex; align-items:center; gap:8px; }
+  .range-pair input { text-align:center; }
+  .range-pair span { color:var(--ink-faint); font-size:0.78rem; white-space:nowrap; }
+  .auto-toggle { display:inline-flex; align-items:center; gap:5px; margin-left:8px; text-transform:none; letter-spacing:0; font-size:0.72rem; color:var(--ink-dim); cursor:pointer; }
+  .auto-toggle input { width:auto; accent-color:var(--amber); cursor:pointer; }
+
+  .action-panel { display:flex; gap:12px; padding:14px 18px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+  .btn {
+    background:var(--bg-panel-2); color:var(--ink); border:1px solid var(--rule); border-radius:var(--radius);
+    padding:10px 16px; font-family:var(--mono); font-size:0.78rem; letter-spacing:0.04em; cursor:pointer; white-space:nowrap;
+    transition:border-color 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { background:#232b30; }
+  .btn:active { transform:translateY(1px); }
+  .btn.amber { border-color:var(--amber-dim); }
+  .btn.amber:hover { border-color:var(--amber); }
+  .btn.cyan { border-color:var(--cyan-dim); }
+  .btn.cyan:hover { border-color:var(--cyan); }
+  .btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .btn:disabled:hover { background:var(--bg-panel-2); }
+  .status-text { font-size:0.72rem; color:var(--ink-dim); margin-left:auto; }
+  .status-text .pct { color:var(--amber); }
+
+  .graph-panel { padding:12px; margin-bottom:16px; }
+  .canvas-wrap { position:relative; width:100%; touch-action:none; }
+  canvas#glCanvas { width:100%; height:auto; display:block; border-radius:2px; cursor:grab; background:#1b2126; }
+  canvas#glCanvas:active { cursor:grabbing; }
+  .hint {
+    position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+    font-size:0.66rem; color:var(--ink-faint); letter-spacing:0.05em; text-transform:uppercase;
+    pointer-events:none; background:rgba(20,24,28,0.55); padding:4px 10px; border-radius:12px;
+  }
+
+  .info-panel { padding:12px 18px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:0.72rem; color:var(--ink-dim); margin-bottom:24px; }
+  .info-panel b { color:var(--ink); font-weight:600; }
+  .info-panel .eq-item { flex:1 1 100%; word-break:break-word; }
+
+  footer { text-align:center; color:var(--ink-faint); font-size:0.68rem; letter-spacing:0.04em; padding:10px 0 30px 0; }
+
+  #exportCanvas { position:absolute; left:-9999px; top:-9999px; }
+
+  @media (prefers-reduced-motion: reduce){ * { transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <h1>3D Surface <em>Plotter</em></h1>
+      <div class="sub">explicit · implicit · parametric · drag or swipe to rotate</div>
+    </div>
+    <div class="eyebrow">canvas 2D · custom rasterizer</div>
+  </header>
+
+  <div class="panel eq-panel">
+    <div class="mode-row">
+      <div class="field">
+        <label>Surface type</label>
+        <div class="seg" id="modeSeg">
+          <button data-mode="explicit" class="active">z = f(x,y)</button>
+          <button data-mode="implicit">F(x,y,z) = 0</button>
+          <button data-mode="parametric">x,y,z(u,v)</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Preset</label>
+        <select id="presetSelect"></select>
+      </div>
+    </div>
+
+    <div class="eq-group" id="explicitGroup">
+      <div class="field">
+        <label><span class="dot" style="background:var(--amber)"></span>z = f(x, y)</label>
+        <input type="text" id="explicitInput" autocomplete="off" spellcheck="false">
+        <div class="err-msg" id="explicitErr"></div>
+      </div>
+    </div>
+
+    <div class="eq-group" id="implicitGroup" style="display:none">
+      <div class="field">
+        <label><span class="dot" style="background:var(--amber)"></span>F(x, y, z) — surface where this equals 0</label>
+        <input type="text" id="implicitInput" autocomplete="off" spellcheck="false">
+        <div class="err-msg" id="implicitErr"></div>
+      </div>
+    </div>
+
+    <div class="eq-group triple" id="parametricGroup" style="display:none">
+      <div class="field">
+        <label><span class="dot" style="background:var(--amber)"></span>x(u, v)</label>
+        <input type="text" id="paramXInput" autocomplete="off" spellcheck="false">
+        <div class="err-msg" id="paramXErr"></div>
+      </div>
+      <div class="field">
+        <label><span class="dot" style="background:var(--cyan)"></span>y(u, v)</label>
+        <input type="text" id="paramYInput" autocomplete="off" spellcheck="false">
+        <div class="err-msg" id="paramYErr"></div>
+      </div>
+      <div class="field">
+        <label><span class="dot" style="background:var(--ink-faint)"></span>z(u, v)</label>
+        <input type="text" id="paramZInput" autocomplete="off" spellcheck="false">
+        <div class="err-msg" id="paramZErr"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel range-panel" id="rangePanel">
+    <div class="field" id="range1Field">
+      <label id="range1Label">X range</label>
+      <div class="range-pair">
+        <input type="number" id="range1Min" value="-6" step="any">
+        <span>to</span>
+        <input type="number" id="range1Max" value="6" step="any">
+      </div>
+    </div>
+    <div class="field" id="range2Field">
+      <label id="range2Label">Y range</label>
+      <div class="range-pair">
+        <input type="number" id="range2Min" value="-6" step="any">
+        <span>to</span>
+        <input type="number" id="range2Max" value="6" step="any">
+      </div>
+    </div>
+    <div class="field" id="range3Field">
+      <label id="range3Label">Z range <span class="auto-toggle" id="range3AutoWrap"><input type="checkbox" id="range3Auto" checked> Auto-fit</span></label>
+      <div class="range-pair">
+        <input type="number" id="range3Min" value="-1" step="any" disabled>
+        <span>to</span>
+        <input type="number" id="range3Max" value="1" step="any" disabled>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel action-panel">
+    <button class="btn" id="resetViewBtn">⟲ Reset view</button>
+    <button class="btn amber" id="exportPngBtn">⤓ Export PNG (light)</button>
+    <button class="btn cyan" id="exportVideoBtn">⤓ Export 360° rotation (webm)</button>
+    <span class="status-text" id="statusText"></span>
+  </div>
+
+  <div class="panel graph-panel">
+    <div class="canvas-wrap">
+      <canvas id="glCanvas"></canvas>
+      <div class="hint">drag to rotate · scroll to zoom</div>
+    </div>
+  </div>
+
+  <div class="panel info-panel">
+    <span class="eq-item">equation: <b id="infoEq">—</b></span>
+    <span>mesh detail: <b id="infoTris">—</b> triangles</span>
+    <span>azimuth: <b id="infoAz">—</b></span>
+    <span>elevation: <b id="infoEl">—</b></span>
+  </div>
+
+  <footer>custom 3D rasterizer · marching tetrahedra · painter's algorithm · zero external dependencies</footer>
+</div>
+
+<canvas id="exportCanvas"></canvas>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= expression engine (generalized variables) ================= */
+
+  const FUNCS = {
+    sin: Math.sin, cos: Math.cos, tan: Math.tan,
+    asin: Math.asin, acos: Math.acos, atan: Math.atan,
+    sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
+    exp: Math.exp, sqrt: Math.sqrt, cbrt: Math.cbrt,
+    abs: Math.abs, floor: Math.floor, ceil: Math.ceil, round: Math.round,
+    sign: Math.sign, ln: Math.log, log: Math.log10, log2: Math.log2,
+    min: Math.min, max: Math.max, pow: Math.pow, hypot: Math.hypot,
+  };
+  const CONSTS = { pi: Math.PI, e: Math.E };
+
+  function tokenize(str){
+    const tokens = []; let i=0; const n=str.length;
+    while (i<n){
+      const c=str[i];
+      if (c===' '||c==='\t'||c==='\n'){ i++; continue; }
+      if (/[0-9.]/.test(c)){
+        let j=i; while(j<n && /[0-9.]/.test(str[j])) j++;
+        if (j<n && (str[j]==='e'||str[j]==='E') && /[0-9+\-]/.test(str[j+1]||'')){ j++; if(str[j]==='+'||str[j]==='-') j++; while(j<n&&/[0-9]/.test(str[j])) j++; }
+        const raw = str.slice(i,j);
+        if ((raw.match(/\./g)||[]).length > 1) throw new Error(`Malformed number '${raw}'`);
+        tokens.push({type:'NUM', value:parseFloat(raw)}); i=j; continue;
+      }
+      if (/[a-zA-Z_]/.test(c)){ let j=i; while(j<n&&/[a-zA-Z_0-9]/.test(str[j])) j++; tokens.push({type:'IDENT', value:str.slice(i,j)}); i=j; continue; }
+      if ('+-*/^%(),'.includes(c)){ tokens.push({type:'OP',value:c}); i++; continue; }
+      throw new Error(`Unexpected character '${c}'`);
+    }
+    return tokens;
+  }
+
+  class Parser {
+    constructor(t){ this.toks=t; this.pos=0; }
+    peek(){ return this.toks[this.pos]; }
+    expectOp(v){ const t=this.peek(); if(!t||t.type!=='OP'||t.value!==v) throw new Error(`Expected '${v}'${t?` but found '${t.value}'`:', reached end of expression'}`); this.pos++; }
+    parse(){ const n=this.expression(); if(this.pos<this.toks.length) throw new Error(`Unexpected token '${this.peek().value}'`); return n; }
+    expression(){ let node=this.term(); while(true){ const t=this.peek(); if(t&&t.type==='OP'&&(t.value==='+'||t.value==='-')){this.pos++; node={type:'bin',op:t.value,left:node,right:this.term()};} else break; } return node; }
+    startsPrimary(t){ if(!t) return false; if(t.type==='NUM'||t.type==='IDENT') return true; if(t.type==='OP'&&t.value==='(') return true; return false; }
+    term(){ let node=this.unary(); while(true){ const t=this.peek(); if(t&&t.type==='OP'&&(t.value==='*'||t.value==='/'||t.value==='%')){this.pos++; node={type:'bin',op:t.value,left:node,right:this.unary()};} else if(this.startsPrimary(t)){node={type:'bin',op:'*',left:node,right:this.unary()};} else break; } return node; }
+    unary(){ const t=this.peek(); if(t&&t.type==='OP'&&(t.value==='-'||t.value==='+')){this.pos++; return {type:t.value==='-'?'neg':'pos', node:this.unary()};} return this.power(); }
+    power(){ const base=this.primary(); const t=this.peek(); if(t&&t.type==='OP'&&t.value==='^'){this.pos++; return {type:'pow', base, exp:this.unary()};} return base; }
+    primary(){
+      const t=this.peek();
+      if(!t) throw new Error('Unexpected end of expression');
+      if(t.type==='NUM'){ this.pos++; return {type:'num', value:t.value}; }
+      if(t.type==='OP'&&t.value==='('){ this.pos++; const e=this.expression(); this.expectOp(')'); return e; }
+      if(t.type==='IDENT'){
+        this.pos++;
+        const name=t.value.toLowerCase();
+        const nt=this.peek();
+        if(nt&&nt.type==='OP'&&nt.value==='('){
+          this.pos++;
+          const args=[this.expression()];
+          while(this.peek()&&this.peek().type==='OP'&&this.peek().value===','){ this.pos++; args.push(this.expression()); }
+          this.expectOp(')');
+          if(!(name in FUNCS)) throw new Error(`Unknown function '${name}'`);
+          return {type:'call', name, args};
+        }
+        return {type:'ident', name};
+      }
+      throw new Error(`Unexpected token '${t.value}'`);
+    }
+  }
+
+  function parseExpr(str){ const trimmed=str.trim(); if(!trimmed) throw new Error('Enter an expression'); return new Parser(tokenize(trimmed)).parse(); }
+
+  function collectIdents(node, set){
+    if (!node) return;
+    if (node.type==='ident') set.add(node.name);
+    else if (node.type==='neg'||node.type==='pos') collectIdents(node.node,set);
+    else if (node.type==='pow'){ collectIdents(node.base,set); collectIdents(node.exp,set); }
+    else if (node.type==='bin'){ collectIdents(node.left,set); collectIdents(node.right,set); }
+    else if (node.type==='call'){ node.args.forEach(a=>collectIdents(a,set)); }
+  }
+
+  function validateVars(ast, allowedVars){
+    const idents = new Set();
+    collectIdents(ast, idents);
+    for (const name of idents){
+      if (!allowedVars.includes(name) && !(name in CONSTS)) throw new Error(`Unknown identifier '${name}'`);
+    }
+  }
+
+  function evalAST(node, vars){
+    switch(node.type){
+      case 'num': return node.value;
+      case 'ident': return (node.name in vars) ? vars[node.name] : CONSTS[node.name];
+      case 'neg': return -evalAST(node.node,vars);
+      case 'pos': return evalAST(node.node,vars);
+      case 'pow': return Math.pow(evalAST(node.base,vars), evalAST(node.exp,vars));
+      case 'bin': { const l=evalAST(node.left,vars), r=evalAST(node.right,vars);
+        switch(node.op){ case '+':return l+r; case '-':return l-r; case '*':return l*r; case '/':return l/r; case '%':return l%r; } break; }
+      case 'call': { const args=node.args.map(a=>evalAST(a,vars)); return FUNCS[node.name](...args); }
+    }
+    throw new Error('Bad expression tree');
+  }
+
+  function tryParseValidated(str, allowedVars){
+    try {
+      const ast = parseExpr(str);
+      validateVars(ast, allowedVars);
+      return { ast, error: null };
+    } catch(e){ return { ast: null, error: e.message }; }
+  }
+
+  /* ================= marching tetrahedra (implicit surfaces) ================= */
+
+  const CUBE_CORNERS = [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+  const TETS = [[0,1,2,6],[0,2,3,6],[0,3,7,6],[0,7,4,6],[0,4,5,6],[0,5,1,6]];
+
+  function interpPt(pa, va, pb, vb){
+    const t = va/(va-vb);
+    return [ pa[0]+t*(pb[0]-pa[0]), pa[1]+t*(pb[1]-pa[1]), pa[2]+t*(pb[2]-pa[2]) ];
+  }
+
+  function marchTet(pts, vals){
+    const inside=[], outside=[];
+    for (let i=0;i<4;i++){
+      if (!isFinite(vals[i])) return [];
+      if (vals[i] < 0) inside.push(i); else outside.push(i);
+    }
+    const tris = [];
+    if (inside.length === 0 || inside.length === 4) return tris;
+    if (inside.length === 1 || inside.length === 3){
+      const lone = inside.length===1 ? inside[0] : outside[0];
+      const others = inside.length===1 ? outside : inside;
+      tris.push([
+        interpPt(pts[lone],vals[lone],pts[others[0]],vals[others[0]]),
+        interpPt(pts[lone],vals[lone],pts[others[1]],vals[others[1]]),
+        interpPt(pts[lone],vals[lone],pts[others[2]],vals[others[2]])
+      ]);
+    } else {
+      const [a,b] = inside, [c,d] = outside;
+      const Pac=interpPt(pts[a],vals[a],pts[c],vals[c]), Pad=interpPt(pts[a],vals[a],pts[d],vals[d]);
+      const Pbc=interpPt(pts[b],vals[b],pts[c],vals[c]), Pbd=interpPt(pts[b],vals[b],pts[d],vals[d]);
+      tris.push([Pac,Pbc,Pbd]);
+      tris.push([Pac,Pbd,Pad]);
+    }
+    return tris;
+  }
+
+  function marchingTetrahedra(F, xMin,xMax,yMin,yMax,zMin,zMax, res){
+    const nGrid = res+1;
+    const vals = new Float64Array(nGrid*nGrid*nGrid);
+    const idx = (i,j,k) => (k*nGrid+j)*nGrid+i;
+    for (let k=0;k<nGrid;k++){
+      const zv = zMin+(zMax-zMin)*k/res;
+      for (let j=0;j<nGrid;j++){
+        const yv = yMin+(yMax-yMin)*j/res;
+        for (let i=0;i<nGrid;i++){
+          const xv = xMin+(xMax-xMin)*i/res;
+          let f;
+          try { f = F(xv,yv,zv); if (!isFinite(f)) f = NaN; } catch(e){ f = NaN; }
+          vals[idx(i,j,k)] = f;
+        }
+      }
+    }
+    const triangles = [];
+    for (let k=0;k<res;k++){
+      for (let j=0;j<res;j++){
+        for (let i=0;i<res;i++){
+          const cellPts=[], cellVals=[];
+          for (const [ci,cj,ck] of CUBE_CORNERS){
+            const gi=i+ci, gj=j+cj, gk=k+ck;
+            cellPts.push([
+              xMin+(xMax-xMin)*gi/res,
+              yMin+(yMax-yMin)*gj/res,
+              zMin+(zMax-zMin)*gk/res
+            ]);
+            cellVals.push(vals[idx(gi,gj,gk)]);
+          }
+          for (const tet of TETS){
+            const pts = tet.map(ci => cellPts[ci]);
+            const vs = tet.map(ci => cellVals[ci]);
+            const tris = marchTet(pts, vs);
+            for (const tr of tris) triangles.push(tr);
+          }
+        }
+      }
+    }
+    return triangles;
+  }
+
+  /* ================= mesh builders (explicit / parametric) ================= */
+
+  function buildExplicitTriangles(ast, xMin,xMax,yMin,yMax, res){
+    const n = res+1;
+    const pts = new Array(n*n);
+    const zVals = [];
+    for (let j=0;j<n;j++){
+      const yv = yMin+(yMax-yMin)*j/res;
+      for (let i=0;i<n;i++){
+        const xv = xMin+(xMax-xMin)*i/res;
+        let zv;
+        try { zv = evalAST(ast, {x:xv,y:yv}); if (!isFinite(zv)) zv = NaN; } catch(e){ zv = NaN; }
+        if (isFinite(zv)){ pts[j*n+i] = [xv,yv,zv]; zVals.push(zv); }
+        else pts[j*n+i] = null;
+      }
+    }
+    const tris = [];
+    for (let j=0;j<res;j++){
+      for (let i=0;i<res;i++){
+        const p00=pts[j*n+i], p10=pts[j*n+i+1], p01=pts[(j+1)*n+i], p11=pts[(j+1)*n+i+1];
+        if (p00&&p10&&p11) tris.push([p00,p10,p11]);
+        if (p00&&p11&&p01) tris.push([p00,p11,p01]);
+      }
+    }
+    return { tris, zVals };
+  }
+
+  function buildParametricTriangles(astX,astY,astZ, uMin,uMax,vMin,vMax, resU,resV){
+    const nu=resU+1, nv=resV+1;
+    const pts = new Array(nu*nv);
+    for (let j=0;j<nv;j++){
+      const vv = vMin+(vMax-vMin)*j/resV;
+      for (let i=0;i<nu;i++){
+        const uu = uMin+(uMax-uMin)*i/resU;
+        let xv,yv,zv;
+        try {
+          xv = evalAST(astX,{u:uu,v:vv});
+          yv = evalAST(astY,{u:uu,v:vv});
+          zv = evalAST(astZ,{u:uu,v:vv});
+          if (!isFinite(xv)||!isFinite(yv)||!isFinite(zv)){ pts[j*nu+i]=null; continue; }
+        } catch(e){ pts[j*nu+i]=null; continue; }
+        pts[j*nu+i]=[xv,yv,zv];
+      }
+    }
+    const tris = [];
+    for (let j=0;j<resV;j++){
+      for (let i=0;i<resU;i++){
+        const p00=pts[j*nu+i], p10=pts[j*nu+i+1], p01=pts[(j+1)*nu+i], p11=pts[(j+1)*nu+i+1];
+        if (p00&&p10&&p11) tris.push([p00,p10,p11]);
+        if (p00&&p11&&p01) tris.push([p00,p11,p01]);
+      }
+    }
+    return tris;
+  }
+
+  function computeAutoRange1D(values){
+    if (values.length===0) return [-1,1];
+    const arr = values.slice().sort((a,b)=>a-b);
+    const pct = p => arr[Math.min(arr.length-1, Math.max(0, Math.round(p*(arr.length-1))))];
+    let lo=pct(0.02), hi=pct(0.98);
+    let range = hi-lo;
+    if (range<1e-9){ const mag=Math.max(Math.abs(hi),Math.abs(lo),1); lo-=mag; hi+=mag; range=hi-lo; }
+    const pad = range*0.12;
+    return [lo-pad, hi+pad];
+  }
+
+  /* ================= presets ================= */
+
+  const PRESETS = {
+    explicit: [
+      { name:'Ripple', expr:'sin(sqrt(x^2+y^2))', x:[-8,8], y:[-8,8] },
+      { name:'Saddle', expr:'x^2 - y^2', x:[-3,3], y:[-3,3] },
+      { name:'Gaussian Bump', expr:'exp(-(x^2+y^2)/4)', x:[-5,5], y:[-5,5] },
+      { name:'Monkey Saddle', expr:'x^3 - 3*x*y^2', x:[-2,2], y:[-2,2] },
+      { name:'Sinc Product', expr:'sin(x)*cos(y)', x:[-6,6], y:[-6,6] },
+      { name:'Peaks', expr:'3*(1-x)^2*exp(-x^2-(y+1)^2) - 10*(x/5-x^3-y^5)*exp(-x^2-y^2) - exp(-(x+1)^2-y^2)/3', x:[-3,3], y:[-3,3] },
+    ],
+    implicit: [
+      { name:'Sphere', expr:'x^2+y^2+z^2-9', x:[-4,4], y:[-4,4], z:[-4,4] },
+      { name:'Torus', expr:'(sqrt(x^2+y^2)-3)^2+z^2-1', x:[-5,5], y:[-5,5], z:[-2,2] },
+      { name:'Ellipsoid', expr:'x^2/4+y^2/9+z^2-1', x:[-3,3], y:[-4,4], z:[-2,2] },
+      { name:'Double Cone', expr:'x^2+y^2-z^2', x:[-3,3], y:[-3,3], z:[-3,3] },
+    ],
+    parametric: [
+      { name:'Sphere', x:'4*sin(v)*cos(u)', y:'4*sin(v)*sin(u)', z:'4*cos(v)', u:[0,6.2832], v:[0,3.1416] },
+      { name:'Torus', x:'(3+cos(v))*cos(u)', y:'(3+cos(v))*sin(u)', z:'sin(v)', u:[0,6.2832], v:[0,6.2832] },
+      { name:'Helicoid', x:'u*cos(v)', y:'u*sin(v)', z:'0.5*v', u:[0,4], v:[0,12.566] },
+      { name:'Möbius Strip', x:'(3+u*cos(v/2))*cos(v)', y:'(3+u*cos(v/2))*sin(v)', z:'u*sin(v/2)', u:[-1,1], v:[0,6.2832] },
+      { name:'Klein Bottle', x:'(2+cos(v/2)*sin(u)-sin(v/2)*sin(2*u))*cos(v)', y:'(2+cos(v/2)*sin(u)-sin(v/2)*sin(2*u))*sin(v)', z:'sin(v/2)*sin(u)+cos(v/2)*sin(2*u)', u:[0,6.2832], v:[0,6.2832] },
+    ]
+  };
+
+  const RES_EXPLICIT = 48;
+  const RES_PARAM = 44;
+  const RES_IMPLICIT = 22;
+
+  /* ================= state ================= */
+
+  const state = {
+    mode: 'explicit',
+    explicit: { expr:'', ast:null, valid:false },
+    implicit: { expr:'', ast:null, valid:false },
+    parametric: { xExpr:'', yExpr:'', zExpr:'', xAst:null, yAst:null, zAst:null, xValid:false, yValid:false, zValid:false },
+    range1Min:-6, range1Max:6,
+    range2Min:-6, range2Max:6,
+    range3Min:-1, range3Max:1, range3Auto:true,
+    azimuth:-0.95, elevation:0.5, zoom:1,
+    mesh: null,
+  };
+
+  function isModeValid(){
+    if (state.mode==='explicit') return state.explicit.valid;
+    if (state.mode==='implicit') return state.implicit.valid;
+    return state.parametric.xValid && state.parametric.yValid && state.parametric.zValid;
+  }
+
+  /* ================= 3D math ================= */
+
+  function rotatePoint(nx, ny, nz, theta, phi){
+    const cosT=Math.cos(theta), sinT=Math.sin(theta);
+    const x1 = nx*cosT - ny*sinT;
+    const y1 = nx*sinT + ny*cosT;
+    const z1 = nz;
+    const cosP=Math.cos(phi), sinP=Math.sin(phi);
+    const y2 = y1*cosP - z1*sinP;
+    const z2 = y1*sinP + z1*cosP;
+    const x2 = x1;
+    return [x2, y2, z2];
+  }
+
+  const THEMES = {
+    dark: { bg:'#1b2126', axis:'#5c6b6e', text:'#8ea0a3', textStrong:'#dfe6e6' },
+    light:{ bg:'#faf8f4', axis:'#6b6a63', text:'#57564f', textStrong:'#1e1e1c' }
+  };
+
+  function heightColor(t){
+    t = Math.max(0, Math.min(1, t));
+    const cyan=[89,199,201], mid=[110,120,128], amber=[232,169,74];
+    let c1,c2,tt;
+    if (t<0.5){ c1=cyan; c2=mid; tt=t/0.5; } else { c1=mid; c2=amber; tt=(t-0.5)/0.5; }
+    return [ Math.round(c1[0]+(c2[0]-c1[0])*tt), Math.round(c1[1]+(c2[1]-c1[1])*tt), Math.round(c1[2]+(c2[2]-c1[2])*tt) ];
+  }
+
+  function sub3(a,b){ return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+  function cross3(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+  function dot3(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+  function normalize3(a){ const m=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/m,a[1]/m,a[2]/m]; }
+  function rotateVec(v, theta, phi){ return rotatePoint(v[0],v[1],v[2],theta,phi); }
+
+  /* ================= mesh rebuilding ================= */
+
+  function doRebuildMesh(){
+    if (!isModeValid()){ state.mesh = null; return; }
+
+    let rawTris = [];
+    let xMin,xMax,yMin,yMax,zMin,zMax;
+
+    if (state.mode === 'explicit'){
+      xMin=state.range1Min; xMax=state.range1Max;
+      yMin=state.range2Min; yMax=state.range2Max;
+      const built = buildExplicitTriangles(state.explicit.ast, xMin,xMax,yMin,yMax, RES_EXPLICIT);
+      rawTris = built.tris;
+      if (state.range3Auto){
+        const zr = computeAutoRange1D(built.zVals);
+        zMin=zr[0]; zMax=zr[1];
+        state.range3Min=zMin; state.range3Max=zMax;
+        range3MinI.value = zMin.toFixed(2);
+        range3MaxI.value = zMax.toFixed(2);
+      } else {
+        zMin=state.range3Min; zMax=state.range3Max;
+      }
+    } else if (state.mode === 'implicit'){
+      xMin=state.range1Min; xMax=state.range1Max;
+      yMin=state.range2Min; yMax=state.range2Max;
+      zMin=state.range3Min; zMax=state.range3Max;
+      const F = (x,y,z) => evalAST(state.implicit.ast, {x,y,z});
+      rawTris = marchingTetrahedra(F, xMin,xMax,yMin,yMax,zMin,zMax, RES_IMPLICIT);
+    } else {
+      const uMin=state.range1Min, uMax=state.range1Max, vMin=state.range2Min, vMax=state.range2Max;
+      rawTris = buildParametricTriangles(state.parametric.xAst, state.parametric.yAst, state.parametric.zAst, uMin,uMax,vMin,vMax, RES_PARAM, RES_PARAM);
+      const xs=[], ys=[], zs=[];
+      for (const tri of rawTris){ for (const p of tri){ xs.push(p[0]); ys.push(p[1]); zs.push(p[2]); } }
+      const xr = computeAutoRange1D(xs), yr = computeAutoRange1D(ys), zr = computeAutoRange1D(zs);
+      xMin=xr[0]; xMax=xr[1]; yMin=yr[0]; yMax=yr[1]; zMin=zr[0]; zMax=zr[1];
+    }
+
+    if (!rawTris || rawTris.length === 0){
+      state.mesh = { triangles:new Float32Array(0), count:0, ranges:{
+        xMin: xMin!==undefined?xMin:-1, xMax: xMax!==undefined?xMax:1,
+        yMin: yMin!==undefined?yMin:-1, yMax: yMax!==undefined?yMax:1,
+        zMin: zMin!==undefined?zMin:-1, zMax: zMax!==undefined?zMax:1
+      }};
+      return;
+    }
+
+    const xMid=(xMin+xMax)/2, xHalf=(xMax-xMin)/2||1;
+    const yMid=(yMin+yMax)/2, yHalf=(yMax-yMin)/2||1;
+    const zMid=(zMin+zMax)/2, zHalf=(zMax-zMin)/2||1;
+
+    const count = rawTris.length;
+    const arr = new Float32Array(count*9);
+    for (let t=0;t<count;t++){
+      const tri = rawTris[t];
+      for (let v=0; v<3; v++){
+        const p = tri[v];
+        const base = t*9+v*3;
+        arr[base]   = (p[0]-xMid)/xHalf;
+        arr[base+1] = (p[1]-yMid)/yHalf;
+        arr[base+2] = (p[2]-zMid)/zHalf;
+      }
+    }
+
+    state.mesh = { triangles: arr, count, ranges: {xMin,xMax,yMin,yMax,zMin,zMax} };
+  }
+
+  function rebuildMesh(){
+    if (state.mode === 'implicit'){
+      statusText.textContent = 'Building surface…';
+      setTimeout(() => {
+        doRebuildMesh();
+        draw();
+        updateInfoPanel();
+        statusText.textContent = '';
+      }, 20);
+    } else {
+      doRebuildMesh();
+      draw();
+      updateInfoPanel();
+    }
+  }
+
+  /* ================= renderer ================= */
+
+  function renderFrame(ctx, W, H, theme, mesh, azimuth, elevation, zoom, opts){
+    opts = opts || {};
+    const T = THEMES[theme];
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = T.bg;
+    ctx.fillRect(0,0,W,H);
+
+    const topMargin = opts.topMargin || 0;
+    const cx = W/2;
+    const cy = topMargin + (H-topMargin)/2 + H*0.02;
+    const scale = Math.min(W, H-topMargin) * 0.34 * zoom;
+
+    if (!isModeValid()){
+      ctx.fillStyle = T.text; ctx.font='14px JetBrains Mono, monospace'; ctx.textAlign='center';
+      ctx.fillText('Fix the equation above to see the surface.', cx, cy);
+      return;
+    }
+    if (!mesh || mesh.count === 0){
+      ctx.fillStyle = T.text; ctx.font='14px JetBrains Mono, monospace'; ctx.textAlign='center';
+      ctx.fillText('No surface found in this range — try adjusting the ranges.', cx, cy);
+      return;
+    }
+
+    const { xMin, xMax, yMin, yMax, zMin, zMax } = mesh.ranges;
+    const tri = mesh.triangles;
+    const n = mesh.count;
+
+    const sx = new Float32Array(n*3), sy = new Float32Array(n*3), depth = new Float32Array(n*3);
+    for (let i=0;i<n*3;i++){
+      const b = i*3;
+      const rp = rotatePoint(tri[b], tri[b+1], tri[b+2], azimuth, elevation);
+      sx[i] = cx + rp[0]*scale;
+      sy[i] = cy - rp[2]*scale;
+      depth[i] = rp[1];
+    }
+
+    const order = new Array(n);
+    const avgDepth = new Float32Array(n);
+    for (let t=0;t<n;t++){
+      const i0=t*3, i1=t*3+1, i2=t*3+2;
+      avgDepth[t] = (depth[i0]+depth[i1]+depth[i2])/3;
+      order[t] = t;
+    }
+    order.sort((a,b) => avgDepth[a]-avgDepth[b]);
+
+    const L = normalize3([0.35,-0.5,0.85]);
+
+    for (const t of order){
+      const i0=t*3, i1=t*3+1, i2=t*3+2;
+      const b0=i0*3, b1=i1*3, b2=i2*3;
+      const p0=[tri[b0],tri[b0+1],tri[b0+2]], p1=[tri[b1],tri[b1+1],tri[b1+2]], p2=[tri[b2],tri[b2+1],tri[b2+2]];
+      let normal = cross3(sub3(p1,p0), sub3(p2,p0));
+      normal = rotateVec(normal, azimuth, elevation);
+      normal = normalize3(normal);
+      let shade = dot3(normal, L);
+      if (shade < 0) shade = -shade;
+      shade = 0.4 + 0.6*shade;
+      if (shade > 1) shade = 1;
+
+      const nzAvg = (p0[2]+p1[2]+p2[2])/3;
+      const tcolor = Math.max(0, Math.min(1, (nzAvg+1)/2));
+      const cbase = heightColor(tcolor);
+      const r=Math.round(cbase[0]*shade), g=Math.round(cbase[1]*shade), b=Math.round(cbase[2]*shade);
+
+      ctx.beginPath();
+      ctx.moveTo(sx[i0], sy[i0]);
+      ctx.lineTo(sx[i1], sy[i1]);
+      ctx.lineTo(sx[i2], sy[i2]);
+      ctx.closePath();
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fill();
+    }
+
+    /* ---- bounding box wireframe + ticks ---- */
+    function boxPt(nx,ny,nz){
+      const rp = rotatePoint(nx,ny,nz, azimuth, elevation);
+      return [cx + rp[0]*scale, cy - rp[2]*scale];
+    }
+    const corners = {};
+    for (const xi of [-1,1]) for (const yi of [-1,1]) for (const zi of [-1,1]) corners[`${xi},${yi},${zi}`] = boxPt(xi,yi,zi);
+
+    const edges = [
+      [[-1,-1,-1],[1,-1,-1]], [[1,-1,-1],[1,1,-1]], [[1,1,-1],[-1,1,-1]], [[-1,1,-1],[-1,-1,-1]],
+      [[-1,-1,1],[1,-1,1]], [[1,-1,1],[1,1,1]], [[1,1,1],[-1,1,1]], [[-1,1,1],[-1,-1,1]],
+      [[-1,-1,-1],[-1,-1,1]], [[1,-1,-1],[1,-1,1]], [[1,1,-1],[1,1,1]], [[-1,1,-1],[-1,1,1]],
+    ];
+    ctx.strokeStyle = T.axis;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.55;
+    for (const [a,b] of edges){
+      const pa = corners[a.join(',')], pb = corners[b.join(',')];
+      ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = T.text;
+    ctx.font = '10.5px JetBrains Mono, monospace';
+    const TICK_N = 4;
+    function lerp(a,b,t){ return a+(b-a)*t; }
+
+    const axisNames = ['x','y','z'];
+
+    ctx.textAlign = 'center';
+    for (let i=0;i<=TICK_N;i++){
+      const t=i/TICK_N; const xv=lerp(xMin,xMax,t); const nx=lerp(-1,1,t);
+      const p = boxPt(nx,-1,-1);
+      ctx.fillText(fmtTick(xv), p[0], p[1]+14);
+    }
+    for (let i=0;i<=TICK_N;i++){
+      const t=i/TICK_N; const yv=lerp(yMin,yMax,t); const ny=lerp(-1,1,t);
+      const p = boxPt(-1,ny,-1);
+      ctx.fillText(fmtTick(yv), p[0]-16, p[1]+3);
+    }
+    ctx.textAlign = 'left';
+    for (let i=0;i<=TICK_N;i++){
+      const t=i/TICK_N; const zv=lerp(zMin,zMax,t); const nz=lerp(-1,1,t);
+      const p = boxPt(-1,-1,nz);
+      ctx.fillText(fmtTick(zv), p[0]-40, p[1]+3);
+    }
+
+    ctx.fillStyle = T.textStrong;
+    ctx.font = 'italic 13px Fraunces, Georgia, serif';
+    ctx.textAlign = 'center';
+    let pX = boxPt(0,-1,-1); ctx.fillText(axisNames[0], pX[0], pX[1]+28);
+    let pY = boxPt(-1,0,-1); ctx.fillText(axisNames[1], pY[0]-30, pY[1]+3);
+    let pZ = boxPt(-1,-1,0); ctx.fillText(axisNames[2], pZ[0]-52, pZ[1]+3);
+  }
+
+  function fmtTick(v){
+    if (Math.abs(v) < 1e-9) return '0';
+    if (Number.isInteger(v)) return String(v);
+    return v.toPrecision(3).replace(/0+$/,'').replace(/\.$/,'');
+  }
+
+  /* ================= main canvas + interaction ================= */
+
+  const canvas = document.getElementById('glCanvas');
+  const ctx = canvas.getContext('2d');
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  let cssW = 700, cssH = 520;
+
+  function resizeCanvas(){
+    const wrapEl = canvas.parentElement;
+    cssW = wrapEl.clientWidth;
+    cssH = Math.max(340, Math.min(560, cssW * 0.72));
+    canvas.width = cssW * DPR;
+    canvas.height = cssH * DPR;
+    canvas.style.height = cssH + 'px';
+    draw();
+  }
+
+  function draw(){
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    renderFrame(ctx, cssW, cssH, 'dark', state.mesh, state.azimuth, state.elevation, state.zoom, {});
+    document.getElementById('infoAz').textContent = (state.azimuth*180/Math.PI).toFixed(0) + '°';
+    document.getElementById('infoEl').textContent = (state.elevation*180/Math.PI).toFixed(0) + '°';
+  }
+
+  let dragging = false, lastX=0, lastY=0;
+  canvas.addEventListener('mousedown', (e) => { dragging=true; lastX=e.clientX; lastY=e.clientY; });
+  window.addEventListener('mouseup', () => { dragging=false; });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX-lastX, dy = e.clientY-lastY;
+    lastX=e.clientX; lastY=e.clientY;
+    state.azimuth += dx*0.008;
+    state.elevation = Math.max(-1.5, Math.min(1.5, state.elevation - dy*0.008));
+    draw();
+  });
+  canvas.addEventListener('touchstart', (e) => { const t=e.touches[0]; dragging=true; lastX=t.clientX; lastY=t.clientY; }, {passive:true});
+  canvas.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    const dx = t.clientX-lastX, dy = t.clientY-lastY;
+    lastX=t.clientX; lastY=t.clientY;
+    state.azimuth += dx*0.008;
+    state.elevation = Math.max(-1.5, Math.min(1.5, state.elevation - dy*0.008));
+    draw();
+  }, {passive:true});
+  canvas.addEventListener('touchend', () => { dragging=false; });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    state.zoom = Math.max(0.35, Math.min(3, state.zoom * (1 - e.deltaY*0.001)));
+    draw();
+  }, { passive:false });
+
+  document.getElementById('resetViewBtn').addEventListener('click', () => {
+    state.azimuth = -0.95; state.elevation = 0.5; state.zoom = 1;
+    draw();
+  });
+
+  window.addEventListener('resize', resizeCanvas);
+
+  /* ================= form elements ================= */
+
+  const modeSeg = document.getElementById('modeSeg');
+  const presetSelect = document.getElementById('presetSelect');
+
+  const explicitInput = document.getElementById('explicitInput');
+  const explicitErr = document.getElementById('explicitErr');
+  const implicitInput = document.getElementById('implicitInput');
+  const implicitErr = document.getElementById('implicitErr');
+  const paramXInput = document.getElementById('paramXInput'), paramXErr = document.getElementById('paramXErr');
+  const paramYInput = document.getElementById('paramYInput'), paramYErr = document.getElementById('paramYErr');
+  const paramZInput = document.getElementById('paramZInput'), paramZErr = document.getElementById('paramZErr');
+
+  const range1Label=document.getElementById('range1Label'), range1MinI=document.getElementById('range1Min'), range1MaxI=document.getElementById('range1Max');
+  const range2Label=document.getElementById('range2Label'), range2MinI=document.getElementById('range2Min'), range2MaxI=document.getElementById('range2Max');
+  const range3Field=document.getElementById('range3Field'), range3AutoWrap=document.getElementById('range3AutoWrap');
+  const range3AutoI=document.getElementById('range3Auto'), range3MinI=document.getElementById('range3Min'), range3MaxI=document.getElementById('range3Max');
+
+  const statusText = document.getElementById('statusText');
+
+  function debounce(fn, ms){ let t; return (...a) => { clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+  function parseExplicit(){
+    const { ast, error } = tryParseValidated(explicitInput.value, ['x','y']);
+    if (error){ explicitErr.textContent=error; explicitInput.style.borderColor='var(--err)'; state.explicit.valid=false; return; }
+    explicitErr.textContent=''; explicitInput.style.borderColor='';
+    state.explicit.ast=ast; state.explicit.valid=true; state.explicit.expr=explicitInput.value.trim();
+  }
+  function parseImplicit(){
+    const { ast, error } = tryParseValidated(implicitInput.value, ['x','y','z']);
+    if (error){ implicitErr.textContent=error; implicitInput.style.borderColor='var(--err)'; state.implicit.valid=false; return; }
+    implicitErr.textContent=''; implicitInput.style.borderColor='';
+    state.implicit.ast=ast; state.implicit.valid=true; state.implicit.expr=implicitInput.value.trim();
+  }
+  function parseParamX(){
+    const { ast, error } = tryParseValidated(paramXInput.value, ['u','v']);
+    if (error){ paramXErr.textContent=error; paramXInput.style.borderColor='var(--err)'; state.parametric.xValid=false; return; }
+    paramXErr.textContent=''; paramXInput.style.borderColor='';
+    state.parametric.xAst=ast; state.parametric.xValid=true; state.parametric.xExpr=paramXInput.value.trim();
+  }
+  function parseParamY(){
+    const { ast, error } = tryParseValidated(paramYInput.value, ['u','v']);
+    if (error){ paramYErr.textContent=error; paramYInput.style.borderColor='var(--err)'; state.parametric.yValid=false; return; }
+    paramYErr.textContent=''; paramYInput.style.borderColor='';
+    state.parametric.yAst=ast; state.parametric.yValid=true; state.parametric.yExpr=paramYInput.value.trim();
+  }
+  function parseParamZ(){
+    const { ast, error } = tryParseValidated(paramZInput.value, ['u','v']);
+    if (error){ paramZErr.textContent=error; paramZInput.style.borderColor='var(--err)'; state.parametric.zValid=false; return; }
+    paramZErr.textContent=''; paramZInput.style.borderColor='';
+    state.parametric.zAst=ast; state.parametric.zValid=true; state.parametric.zExpr=paramZInput.value.trim();
+  }
+
+  function readRanges(){
+    let r1mn=parseFloat(range1MinI.value), r1mx=parseFloat(range1MaxI.value);
+    if (!isFinite(r1mn)) r1mn=-6; if (!isFinite(r1mx)) r1mx=6; if (r1mx<=r1mn) r1mx=r1mn+1;
+    state.range1Min=r1mn; state.range1Max=r1mx;
+
+    let r2mn=parseFloat(range2MinI.value), r2mx=parseFloat(range2MaxI.value);
+    if (!isFinite(r2mn)) r2mn=-6; if (!isFinite(r2mx)) r2mx=6; if (r2mx<=r2mn) r2mx=r2mn+1;
+    state.range2Min=r2mn; state.range2Max=r2mx;
+
+    if (state.mode === 'explicit'){
+      state.range3Auto = range3AutoI.checked;
+      range3MinI.disabled = state.range3Auto;
+      range3MaxI.disabled = state.range3Auto;
+      if (!state.range3Auto){
+        let r3mn=parseFloat(range3MinI.value), r3mx=parseFloat(range3MaxI.value);
+        if (!isFinite(r3mn)) r3mn=-1; if (!isFinite(r3mx)) r3mx=1; if (r3mx<=r3mn) r3mx=r3mn+1;
+        state.range3Min=r3mn; state.range3Max=r3mx;
+      }
+    } else if (state.mode === 'implicit'){
+      let r3mn=parseFloat(range3MinI.value), r3mx=parseFloat(range3MaxI.value);
+      if (!isFinite(r3mn)) r3mn=-1; if (!isFinite(r3mx)) r3mx=1; if (r3mx<=r3mn) r3mx=r3mn+1;
+      state.range3Min=r3mn; state.range3Max=r3mx;
+    }
+  }
+
+  const debouncedRebuild = debounce(rebuildMesh, 250);
+
+  explicitInput.addEventListener('input', () => { parseExplicit(); debouncedRebuild(); });
+  implicitInput.addEventListener('input', () => { parseImplicit(); debouncedRebuild(); });
+  paramXInput.addEventListener('input', () => { parseParamX(); debouncedRebuild(); });
+  paramYInput.addEventListener('input', () => { parseParamY(); debouncedRebuild(); });
+  paramZInput.addEventListener('input', () => { parseParamZ(); debouncedRebuild(); });
+
+  [range1MinI, range1MaxI, range2MinI, range2MaxI, range3MinI, range3MaxI].forEach(inp => {
+    inp.addEventListener('input', () => { readRanges(); debouncedRebuild(); });
+  });
+  range3AutoI.addEventListener('change', () => { readRanges(); debouncedRebuild(); });
+
+  /* ================= mode switching ================= */
+
+  function setModeUI(mode){
+    modeSeg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    document.getElementById('explicitGroup').style.display = mode==='explicit' ? '' : 'none';
+    document.getElementById('implicitGroup').style.display = mode==='implicit' ? '' : 'none';
+    document.getElementById('parametricGroup').style.display = mode==='parametric' ? '' : 'none';
+
+    if (mode === 'explicit'){
+      range1Label.textContent = 'X range'; range2Label.textContent = 'Y range';
+      document.getElementById('range3Label').firstChild.textContent = 'Z range ';
+      range3Field.style.display = '';
+      range3AutoWrap.style.display = '';
+    } else if (mode === 'implicit'){
+      range1Label.textContent = 'X range'; range2Label.textContent = 'Y range';
+      document.getElementById('range3Label').firstChild.textContent = 'Z range ';
+      range3Field.style.display = '';
+      range3AutoWrap.style.display = 'none';
+      range3MinI.disabled = false; range3MaxI.disabled = false;
+    } else {
+      range1Label.textContent = 'U range'; range2Label.textContent = 'V range';
+      range3Field.style.display = 'none';
+    }
+  }
+
+  function populatePresets(mode){
+    presetSelect.innerHTML = '';
+    PRESETS[mode].forEach((p, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx; opt.textContent = p.name;
+      presetSelect.appendChild(opt);
+    });
+  }
+
+  function applyPreset(mode, idx){
+    const p = PRESETS[mode][idx];
+    if (mode === 'explicit'){
+      explicitInput.value = p.expr;
+      range1MinI.value = p.x[0]; range1MaxI.value = p.x[1];
+      range2MinI.value = p.y[0]; range2MaxI.value = p.y[1];
+      range3AutoI.checked = true;
+      parseExplicit();
+    } else if (mode === 'implicit'){
+      implicitInput.value = p.expr;
+      range1MinI.value = p.x[0]; range1MaxI.value = p.x[1];
+      range2MinI.value = p.y[0]; range2MaxI.value = p.y[1];
+      range3MinI.value = p.z[0]; range3MaxI.value = p.z[1];
+      parseImplicit();
+    } else {
+      paramXInput.value = p.x; paramYInput.value = p.y; paramZInput.value = p.z;
+      range1MinI.value = p.u[0]; range1MaxI.value = p.u[1];
+      range2MinI.value = p.v[0]; range2MaxI.value = p.v[1];
+      parseParamX(); parseParamY(); parseParamZ();
+    }
+    readRanges();
+    state.azimuth = -0.95; state.elevation = 0.5; state.zoom = 1;
+    rebuildMesh();
+  }
+
+  function setMode(mode){
+    state.mode = mode;
+    setModeUI(mode);
+    populatePresets(mode);
+    presetSelect.value = 0;
+    applyPreset(mode, 0);
+  }
+
+  modeSeg.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode));
+  });
+  presetSelect.addEventListener('change', () => applyPreset(state.mode, parseInt(presetSelect.value, 10)));
+
+  function updateInfoPanel(){
+    let eqText;
+    if (state.mode === 'explicit') eqText = 'z = ' + state.explicit.expr;
+    else if (state.mode === 'implicit') eqText = 'F(x,y,z) = ' + state.implicit.expr + ' = 0';
+    else eqText = `x=${state.parametric.xExpr},  y=${state.parametric.yExpr},  z=${state.parametric.zExpr}`;
+    document.getElementById('infoEq').textContent = eqText;
+    document.getElementById('infoTris').textContent = state.mesh ? state.mesh.count.toLocaleString() : '0';
+  }
+
+  /* ================= export: static PNG (light) ================= */
+
+  const exportCanvas = document.getElementById('exportCanvas');
+  const EXPORT_W = 1400, EXPORT_H = 1000;
+
+  function currentEqLines(){
+    if (state.mode === 'explicit') return ['z = ' + state.explicit.expr];
+    if (state.mode === 'implicit') return ['F(x,y,z) = ' + state.implicit.expr + ' = 0'];
+    return [
+      'x = ' + state.parametric.xExpr + ',  y = ' + state.parametric.yExpr,
+      'z = ' + state.parametric.zExpr
+    ];
+  }
+
+  function drawExportHeader(ectx, theme){
+    const T = THEMES[theme];
+    ectx.fillStyle = T.textStrong;
+    ectx.font = "italic 600 26px Fraunces, Georgia, serif";
+    ectx.textAlign = 'center';
+    ectx.fillText('3D surface Graph', EXPORT_W/2, 44);
+    ectx.fillStyle = T.text;
+    ectx.font = '15px JetBrains Mono, monospace';
+    const lines = currentEqLines();
+    lines.forEach((line, i) => ectx.fillText(line, EXPORT_W/2, 70 + i*20));
+    return 70 + lines.length*20 + 14;
+  }
+
+  document.getElementById('exportPngBtn').addEventListener('click', () => {
+    exportCanvas.width = EXPORT_W; exportCanvas.height = EXPORT_H;
+    const ectx = exportCanvas.getContext('2d');
+    const headerBottom = 70 + currentEqLines().length*20 + 14;
+    renderFrame(ectx, EXPORT_W, EXPORT_H, 'light', state.mesh, state.azimuth, state.elevation, state.zoom, { topMargin: headerBottom });
+    drawExportHeader(ectx, 'light');
+
+    const link = document.createElement('a');
+    link.download = '3d_surface_graph.png';
+    link.href = exportCanvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+
+  /* ================= export: 360° rotation video (webm) ================= */
+
+  const exportVideoBtn = document.getElementById('exportVideoBtn');
+
+  function pickMimeType(){
+    const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for (const c of candidates){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c; }
+    return '';
+  }
+
+  exportVideoBtn.addEventListener('click', () => {
+    if (!window.MediaRecorder){ statusText.textContent = 'Video recording is not supported in this browser.'; return; }
+    if (!state.mesh || state.mesh.count === 0){ statusText.textContent = 'Nothing to record — fix the equation first.'; return; }
+
+    const mimeType = pickMimeType();
+    exportCanvas.width = EXPORT_W; exportCanvas.height = EXPORT_H;
+    const ectx = exportCanvas.getContext('2d');
+
+    const FPS = 30;
+    const DURATION_MS = 8000;
+    const startAzimuth = state.azimuth;
+    const fixedElevation = state.elevation;
+    const fixedZoom = state.zoom;
+    const headerBottom = 70 + currentEqLines().length*20 + 14;
+
+    const stream = exportCanvas.captureStream(FPS);
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+
+    exportVideoBtn.disabled = true;
+    document.getElementById('exportPngBtn').disabled = true;
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType || 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = '3d_surface_rotation.webm';
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      exportVideoBtn.disabled = false;
+      document.getElementById('exportPngBtn').disabled = false;
+      statusText.textContent = '';
+    };
+
+    recorder.start();
+    const t0 = performance.now();
+
+    function frame(){
+      const elapsed = performance.now() - t0;
+      const t = Math.min(1, elapsed / DURATION_MS);
+      const az = startAzimuth + t * Math.PI * 2;
+
+      renderFrame(ectx, EXPORT_W, EXPORT_H, 'light', state.mesh, az, fixedElevation, fixedZoom, { topMargin: headerBottom });
+      drawExportHeader(ectx, 'light');
+
+      statusText.innerHTML = 'Recording rotation… <span class="pct">' + Math.round(t*100) + '%</span>';
+
+      if (t < 1) requestAnimationFrame(frame);
+      else setTimeout(() => recorder.stop(), 120);
+    }
+    requestAnimationFrame(frame);
+  });
+
+  /* ================= init ================= */
+
+  populatePresets('explicit');
+  setModeUI('explicit');
+  applyPreset('explicit', 0);
+  resizeCanvas();
+})();
+</script>
+</body>
+</html>

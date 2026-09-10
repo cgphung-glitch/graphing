@@ -4,16 +4,65 @@
   <meta charset="UTF-8">
   <title>Ternary Mole Fraction Plotter</title>
   <style>
+    :root {
+      --bg: #121212;
+      --panel-bg: #1e1e1e;
+      --border: #3a3a3a;
+      --text: #e8e8e8;
+      --text-dim: #bbbbbb;
+      --input-bg: #2a2a2a;
+      --input-border: #555555;
+      --th-bg: #2a2a2a;
+      --btn-bg: #262626;
+      --btn-border: #666666;
+      --btn-hover: #333333;
+      --error: #ff6b6b;
+      --canvas-bg: #1b1b1b;
+      --grid-major: #5a5a5a;
+      --grid-minor: #383838;
+      --axis: #e8e8e8;
+      --tick-text: #bbbbbb;
+      --data-color: #58a6ff;
+    }
+    [data-theme="light"] {
+      --bg: #f7f7f7;
+      --panel-bg: #ffffff;
+      --border: #cccccc;
+      --text: #111111;
+      --text-dim: #444444;
+      --input-bg: #ffffff;
+      --input-border: #bbbbbb;
+      --th-bg: #eeeeee;
+      --btn-bg: #ffffff;
+      --btn-border: #888888;
+      --btn-hover: #f0f0f0;
+      --error: #b00020;
+      --canvas-bg: #ffffff;
+      --grid-major: #cccccc;
+      --grid-minor: #e0e0e0;
+      --axis: #000000;
+      --tick-text: #444444;
+      --data-color: #0077cc;
+    }
     body {
       font-family: system-ui, sans-serif;
       margin: 0;
       padding: 1rem;
-      background-color: #f7f7f7;
-      color: #111;
+      background-color: var(--bg);
+      color: var(--text);
+      transition: background-color .15s, color .15s;
     }
     h1 {
       margin-top: 0;
       font-size: 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    #themeToggleBtn {
+      font-size: 0.85rem;
     }
     .container {
       display: grid;
@@ -22,10 +71,11 @@
       align-items: flex-start;
     }
     .panel {
-      background: #fff;
-      border: 1px solid #ccc;
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
       border-radius: 6px;
       padding: 0.75rem;
+      transition: background-color .15s, border-color .15s;
     }
     label {
       display: inline-block;
@@ -36,8 +86,10 @@
       padding: 0.25rem 0.4rem;
       margin-right: 0.5rem;
       border-radius: 4px;
-      border: 1px solid #bbb;
+      border: 1px solid var(--input-border);
       min-width: 4rem;
+      background: var(--input-bg);
+      color: var(--text);
     }
     table {
       border-collapse: collapse;
@@ -45,42 +97,46 @@
       margin-top: 0.5rem;
     }
     th, td {
-      border: 1px solid #ccc;
+      border: 1px solid var(--border);
       padding: 0.25rem 0.4rem;
       text-align: right;
       font-size: 0.85rem;
     }
     th {
-      background: #eee;
+      background: var(--th-bg);
     }
     button {
       margin-top: 0.5rem;
       margin-right: 0.5rem;
       padding: 0.35rem 0.7rem;
-      border: 1px solid #888;
+      border: 1px solid var(--btn-border);
       border-radius: 4px;
-      background: #fff;
+      background: var(--btn-bg);
+      color: var(--text);
       cursor: pointer;
       font-size: 0.9rem;
     }
     button:hover {
-      background: #f0f0f0;
+      background: var(--btn-hover);
     }
     #plotCanvas {
       width: 100%;
-      border: 1px solid #ccc;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: #fff; /* light mode */
+      background: var(--canvas-bg);
     }
     .error {
-      color: #b00020;
+      color: var(--error);
       font-size: 0.8rem;
       margin-top: 0.4rem;
     }
   </style>
 </head>
 <body>
-  <h1>Ternary Mole Fraction Plotter</h1>
+  <h1>
+    Ternary Mole Fraction Plotter
+    <button id="themeToggleBtn" type="button">Light mode</button>
+  </h1>
   <div class="container">
     <div class="panel">
       <h2>Inputs & Data</h2>
@@ -143,8 +199,8 @@
   </div>
 
 <script>
-  // Utility: add an empty row to the data table
-  function addRow() {
+  // Utility: add a row to the data table, optionally with explicit mole fractions
+  function addRow(a, b, c) {
     const tbody = document.querySelector('#dataTable tbody');
     const rowIndex = tbody.rows.length + 1;
     const tr = document.createElement('tr');
@@ -158,13 +214,13 @@
 
     const aInput = document.createElement('input');
     aInput.type = 'text';
-    aInput.value = rowIndex === 1 ? '1.0' : '0.33';
+    aInput.value = a !== undefined ? a : '0.33';
     const bInput = document.createElement('input');
     bInput.type = 'text';
-    bInput.value = rowIndex === 1 ? '0.0' : '0.33';
+    bInput.value = b !== undefined ? b : '0.33';
     const cInput = document.createElement('input');
     cInput.type = 'text';
-    cInput.value = rowIndex === 1 ? '0.0' : '0.34';
+    cInput.value = c !== undefined ? c : '0.34';
 
     aTd.appendChild(aInput);
     bTd.appendChild(bInput);
@@ -177,10 +233,52 @@
     tbody.appendChild(tr);
   }
 
-  document.getElementById('addRowBtn').addEventListener('click', addRow);
-  // add a couple of default rows
-  addRow();
-  addRow();
+  // The 4 data points shown by default when the page loads (and after Reset).
+  const DEFAULT_POINTS = [
+    { a: '0.4', b: '0.6', c: '0.0' },
+    { a: '0.0', b: '0.2', c: '0.8' },
+    { a: '0.7', b: '0.0', c: '0.3' },
+    { a: '0.3', b: '0.5', c: '0.2' }
+  ];
+  function addDefaultRows() {
+    DEFAULT_POINTS.forEach(p => addRow(p.a, p.b, p.c));
+  }
+
+  document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+
+  // ---- Dark / light theme ----
+  const THEME_KEY = 'ternaryPlotterTheme';
+  const themeToggleBtn = document.getElementById('themeToggleBtn');
+
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      themeToggleBtn.textContent = 'Dark mode';
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      themeToggleBtn.textContent = 'Light mode';
+    }
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* ignore */ }
+  }
+
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  (function initTheme() {
+    let stored = null;
+    try { stored = localStorage.getItem(THEME_KEY); } catch (e) { /* ignore */ }
+    applyTheme(stored === 'light' ? 'light' : 'dark'); // default: dark mode
+  })();
+
+  themeToggleBtn.addEventListener('click', () => {
+    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+    drawPlot();
+  });
+
+  // Populate the default 4 points and show the plot immediately on load.
+  addDefaultRows();
+  drawPlot();
 
   function readData() {
     const tbody = document.querySelector('#dataTable tbody');
@@ -207,7 +305,7 @@
     return {data, error};
   }
 
-  function drawGrid(ctx, unitToCanvas, sqrt3over2, w, h, margin) {
+  function drawGrid(ctx, unitToCanvas, sqrt3over2, w, h, margin, colors) {
     ctx.save();
     ctx.setLineDash([4, 4]); // dashed lines
     ctx.lineWidth = 0.7;
@@ -219,7 +317,7 @@
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
-      ctx.strokeStyle = isMajor ? '#cccccc' : '#e0e0e0';
+      ctx.strokeStyle = isMajor ? colors.gridMajor : colors.gridMinor;
       ctx.stroke();
     }
 
@@ -276,7 +374,7 @@
     ctx.restore();
   }
 
-function drawPlot() {
+function drawPlot(targetCanvas, forceLight) {
   const {data, error} = readData();
   const errorMsg = document.getElementById('errorMsg');
   if (error) {
@@ -292,11 +390,16 @@ function drawPlot() {
   const title = document.getElementById('graphTitle').value || 'Ternary mole fraction plot';
   const style = document.getElementById('plotStyle').value;
 
-  const canvas = document.getElementById('plotCanvas');
+  const canvas = targetCanvas || document.getElementById('plotCanvas');
   const ctx = canvas.getContext('2d');
 
-  // clear canvas (light mode background)
-  ctx.fillStyle = '#ffffff';
+  const isDark = !forceLight && currentTheme() === 'dark';
+  const colors = isDark
+    ? { canvasBg:'#1b1b1b', gridMajor:'#5a5a5a', gridMinor:'#383838', axis:'#e8e8e8', text:'#e8e8e8', tickText:'#bbbbbb', data:'#58a6ff' }
+    : { canvasBg:'#ffffff', gridMajor:'#cccccc', gridMinor:'#e0e0e0', axis:'#000000', text:'#000000', tickText:'#444444', data:'#0077cc' };
+
+  // clear canvas
+  ctx.fillStyle = colors.canvasBg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // layout
@@ -323,10 +426,10 @@ function drawPlot() {
   const C = unitToCanvas(C_unit.x, C_unit.y);
  
   // Draw grid before axes and data
-  drawGrid(ctx, unitToCanvas, sqrt3over2, w, h, margin);
+  drawGrid(ctx, unitToCanvas, sqrt3over2, w, h, margin, colors);
 
   // Draw triangle edges (axes)
-  ctx.strokeStyle = '#000000';
+  ctx.strokeStyle = colors.axis;
   ctx.lineWidth = 1.5;
   ctx.setLineDash([]); // solid
   ctx.beginPath();
@@ -340,7 +443,7 @@ function drawPlot() {
   ctx.font = '12px system-ui';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillStyle = '#000000';
+  ctx.fillStyle = colors.text;
   ctx.fillText(compA + ' (pure)', A.x - 10, A.y + 8);
   ctx.textBaseline = 'bottom';
   ctx.fillText(compB + ' (pure)', B.x, B.y - 8);
@@ -351,17 +454,18 @@ function drawPlot() {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.font = '14px system-ui';
+  ctx.fillStyle = colors.text;
   ctx.fillText(title, canvas.width / 2, 10);
 
   // Edge tick labels in percent
   ctx.font = '10px system-ui';
-  ctx.fillStyle = '#444444';
+  ctx.fillStyle = colors.tickText;
   ctx.setLineDash([]);
 
   // Edge tick labels in percent, aligned with edges and pushed outward
 
   ctx.font = '10px system-ui';
-  ctx.fillStyle = '#444444';
+  ctx.fillStyle = colors.tickText;
   ctx.setLineDash([]);
 
   // Helper: label at fraction t along edge from (x1,y1) to (x2,y2) in unit-space,
@@ -434,8 +538,8 @@ function drawPlot() {
 
   // Draw data according to style
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = '#0077cc';
-  ctx.fillStyle = '#0077cc';
+  ctx.strokeStyle = colors.data;
+  ctx.fillStyle = colors.data;
   ctx.setLineDash([]);
 
   if (style === 'scatter') {
@@ -500,27 +604,31 @@ function drawPlot() {
     document.getElementById('compC').value = 'C';
     document.getElementById('plotStyle').value = 'scatter';
 
-    // Clear canvas
-    const canvas = document.getElementById('plotCanvas');
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Optionally add a couple of default rows again
-    addRow();
-    addRow();
+    // Restore the default 4 data points and redraw
+    addDefaultRows();
+    drawPlot();
   }
 
   document.getElementById('resetBtn').addEventListener('click', resetApp);
 
-  document.getElementById('plotBtn').addEventListener('click', drawPlot);
+  document.getElementById('plotBtn').addEventListener('click', () => drawPlot());
 
-  // Download PNG
+  // Download PNG — always exported in light mode, regardless of the current
+  // on-screen theme, by rendering a separate off-screen copy of the plot.
   document.getElementById('downloadPngBtn').addEventListener('click', function() {
-    const canvas = document.getElementById('plotCanvas');
+    const {error} = readData();
+    if (error) {
+      document.getElementById('errorMsg').textContent = error;
+      return;
+    }
+    const liveCanvas = document.getElementById('plotCanvas');
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = liveCanvas.width;
+    offCanvas.height = liveCanvas.height;
+    drawPlot(offCanvas, true); // forceLight = true
     const link = document.createElement('a');
     link.download = 'ternary_plot.png';
-    link.href = canvas.toDataURL('image/png');
+    link.href = offCanvas.toDataURL('image/png');
     link.click();
   });
 

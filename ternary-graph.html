@@ -18,8 +18,8 @@
       --btn-hover: #333333;
       --error: #ff6b6b;
       --canvas-bg: #1b1b1b;
-      --grid-major: #5a5a5a;
-      --grid-minor: #383838;
+      --grid-major: #7a7a7a;
+      --grid-minor: #4a4a4a;
       --axis: #e8e8e8;
       --tick-text: #bbbbbb;
       --data-color: #58a6ff;
@@ -38,8 +38,8 @@
       --btn-hover: #f0f0f0;
       --error: #b00020;
       --canvas-bg: #ffffff;
-      --grid-major: #cccccc;
-      --grid-minor: #e0e0e0;
+      --grid-major: #a0a0a0;
+      --grid-minor: #cfcfcf;
       --axis: #000000;
       --tick-text: #444444;
       --data-color: #0077cc;
@@ -407,7 +407,7 @@
   function drawGrid(ctx, unitToCanvas, sqrt3over2, w, h, margin, colors) {
     ctx.save();
     ctx.setLineDash([4, 4]); // dashed lines
-    ctx.lineWidth = 0.7;
+    ctx.lineWidth = 1;
 
     // Helper to draw a line between two unit-space points (x,y)
     function lineUnit(x1, y1, x2, y2, isMajor) {
@@ -494,8 +494,8 @@ function drawPlot(targetCanvas, forceLight) {
 
   const isDark = !forceLight && currentTheme() === 'dark';
   const colors = isDark
-    ? { canvasBg:'#1b1b1b', gridMajor:'#5a5a5a', gridMinor:'#383838', axis:'#e8e8e8', text:'#e8e8e8', tickText:'#bbbbbb', data:'#58a6ff' }
-    : { canvasBg:'#ffffff', gridMajor:'#cccccc', gridMinor:'#e0e0e0', axis:'#000000', text:'#000000', tickText:'#444444', data:'#0077cc' };
+    ? { canvasBg:'#1b1b1b', gridMajor:'#7a7a7a', gridMinor:'#4a4a4a', axis:'#e8e8e8', text:'#e8e8e8', tickText:'#bbbbbb', data:'#58a6ff' }
+    : { canvasBg:'#ffffff', gridMajor:'#a0a0a0', gridMinor:'#cfcfcf', axis:'#000000', text:'#000000', tickText:'#444444', data:'#0077cc' };
 
   // clear canvas
   ctx.fillStyle = colors.canvasBg;

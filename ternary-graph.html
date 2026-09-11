@@ -105,6 +105,31 @@
     th {
       background: var(--th-bg);
     }
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    th.sortable:hover {
+      background: var(--btn-hover);
+    }
+    .sort-indicator {
+      font-size: 0.7rem;
+      display: inline-block;
+      width: 0.9em;
+    }
+    .deleteRowBtn {
+      padding: 0.1rem 0.45rem;
+      font-size: 0.85rem;
+      line-height: 1;
+      color: var(--error);
+      border-color: var(--error);
+      margin: 0;
+    }
+    #pointInfo {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      min-height: 1.3em;
+    }
     button {
       margin-top: 0.5rem;
       margin-right: 0.5rem;
@@ -124,6 +149,7 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--canvas-bg);
+      cursor: pointer;
     }
     .error {
       color: var(--error);
@@ -174,9 +200,10 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>A</th>
-            <th>B</th>
-            <th>C</th>
+            <th class="sortable" data-col="a">A <span class="sort-indicator" data-indicator="a"></span></th>
+            <th class="sortable" data-col="b">B <span class="sort-indicator" data-indicator="b"></span></th>
+            <th class="sortable" data-col="c">C <span class="sort-indicator" data-indicator="c"></span></th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -195,18 +222,29 @@
     <div class="panel">
       <h2>Plot</h2>
       <canvas id="plotCanvas" width="500" height="450"></canvas>
+      <div id="pointInfo"></div>
     </div>
   </div>
 
 <script>
+  // Index of the data point currently selected by clicking on the graph (or null).
+  let selectedPointIndex = null;
+
+  // Utility: renumber the "#" column after add/delete/sort so it always
+  // reflects each row's current position in the table.
+  function renumberRows() {
+    const tbody = document.querySelector('#dataTable tbody');
+    Array.from(tbody.rows).forEach((row, i) => {
+      row.cells[0].textContent = i + 1;
+    });
+  }
+
   // Utility: add a row to the data table, optionally with explicit mole fractions
   function addRow(a, b, c) {
     const tbody = document.querySelector('#dataTable tbody');
-    const rowIndex = tbody.rows.length + 1;
     const tr = document.createElement('tr');
 
     const idxTd = document.createElement('td');
-    idxTd.textContent = rowIndex;
 
     const aTd = document.createElement('td');
     const bTd = document.createElement('td');
@@ -226,12 +264,73 @@
     bTd.appendChild(bInput);
     cTd.appendChild(cInput);
 
+    const delTd = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'deleteRowBtn';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Delete row';
+    delBtn.addEventListener('click', () => {
+      tr.remove();
+      renumberRows();
+      selectedPointIndex = null;
+      document.getElementById('pointInfo').textContent = '';
+      drawPlot();
+    });
+    delTd.appendChild(delBtn);
+
     tr.appendChild(idxTd);
     tr.appendChild(aTd);
     tr.appendChild(bTd);
     tr.appendChild(cTd);
+    tr.appendChild(delTd);
     tbody.appendChild(tr);
+    renumberRows();
   }
+
+  // ---- Sorting by column ----
+  let sortColumn = null; // 'a' | 'b' | 'c' | null
+  let sortAscending = true;
+  const COL_INDEX = {a: 1, b: 2, c: 3};
+
+  function updateSortIndicators() {
+    document.querySelectorAll('.sort-indicator').forEach(el => {
+      const col = el.getAttribute('data-indicator');
+      el.textContent = (col === sortColumn) ? (sortAscending ? '▲' : '▼') : '';
+    });
+  }
+
+  function sortByColumn(col) {
+    const tbody = document.querySelector('#dataTable tbody');
+    const rows = Array.from(tbody.rows);
+    const colIdx = COL_INDEX[col];
+
+    if (sortColumn === col) {
+      sortAscending = !sortAscending;
+    } else {
+      sortColumn = col;
+      sortAscending = true;
+    }
+
+    rows.sort((r1, r2) => {
+      const v1 = parseFloat(r1.cells[colIdx].querySelector('input').value);
+      const v2 = parseFloat(r2.cells[colIdx].querySelector('input').value);
+      const n1 = Number.isNaN(v1) ? -Infinity : v1;
+      const n2 = Number.isNaN(v2) ? -Infinity : v2;
+      return sortAscending ? n1 - n2 : n2 - n1;
+    });
+
+    rows.forEach(r => tbody.appendChild(r)); // appendChild on an existing node moves it
+    renumberRows();
+    updateSortIndicators();
+    selectedPointIndex = null;
+    document.getElementById('pointInfo').textContent = '';
+    drawPlot();
+  }
+
+  document.querySelectorAll('#dataTable th.sortable').forEach(th => {
+    th.addEventListener('click', () => sortByColumn(th.getAttribute('data-col')));
+  });
 
   // The 4 data points shown by default when the page loads (and after Reset).
   const DEFAULT_POINTS = [
@@ -585,6 +684,25 @@ function drawPlot(targetCanvas, forceLight) {
       ctx.fill();
     });
   }
+
+  // Highlight the point currently selected by clicking on the graph. This is
+  // only drawn on the live, on-screen canvas — never on the off-screen copy
+  // used for PNG export.
+  if (!targetCanvas) {
+    if (selectedPointIndex !== null && selectedPointIndex < points.length) {
+      const p = points[selectedPointIndex];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = isDark ? '#ffd166' : '#e07b00';
+      ctx.setLineDash([]);
+      ctx.stroke();
+    } else if (selectedPointIndex !== null) {
+      // Selection no longer matches the current data (e.g. a row was deleted).
+      selectedPointIndex = null;
+      document.getElementById('pointInfo').textContent = '';
+    }
+  }
 }
 
   function resetApp() {
@@ -604,6 +722,13 @@ function drawPlot(targetCanvas, forceLight) {
     document.getElementById('compC').value = 'C';
     document.getElementById('plotStyle').value = 'scatter';
 
+    // Clear any sort/selection state from before the reset
+    sortColumn = null;
+    sortAscending = true;
+    updateSortIndicators();
+    selectedPointIndex = null;
+    document.getElementById('pointInfo').textContent = '';
+
     // Restore the default 4 data points and redraw
     addDefaultRows();
     drawPlot();
@@ -612,6 +737,59 @@ function drawPlot(targetCanvas, forceLight) {
   document.getElementById('resetBtn').addEventListener('click', resetApp);
 
   document.getElementById('plotBtn').addEventListener('click', () => drawPlot());
+
+  // Update the graph immediately when the plot style changes.
+  document.getElementById('plotStyle').addEventListener('change', () => drawPlot());
+
+  // Click a point on the graph to see its (A, B, C) coordinates.
+  document.getElementById('plotCanvas').addEventListener('click', handleCanvasClick);
+
+  function handleCanvasClick(evt) {
+    const canvas = document.getElementById('plotCanvas');
+    const {data, error} = readData();
+    const infoEl = document.getElementById('pointInfo');
+    if (error) return; // nothing valid to select while the data has an error
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clickX = (evt.clientX - rect.left) * scaleX;
+    const clickY = (evt.clientY - rect.top) * scaleY;
+
+    // Recompute each point's canvas position the same way drawPlot() does.
+    const margin = 50;
+    const w = canvas.width - 2 * margin;
+    const h = canvas.height - 2 * margin;
+    const sqrt3over2 = Math.sqrt(3) / 2;
+    function unitToCanvas(x, y) {
+      return {x: margin + x * w, y: margin + (1 - y) * h};
+    }
+    const points = data.map(d => {
+      const x_unit = d.c + 0.5 * d.b;
+      const y_unit = sqrt3over2 * d.b;
+      return unitToCanvas(x_unit, y_unit);
+    });
+
+    const hitR = 9; // canvas-pixel hit radius around each point
+    let closestIdx = -1, closestDist = Infinity;
+    points.forEach((p, i) => {
+      const dist = Math.hypot(p.x - clickX, p.y - clickY);
+      if (dist <= hitR && dist < closestDist) { closestDist = dist; closestIdx = i; }
+    });
+
+    if (closestIdx >= 0) {
+      selectedPointIndex = closestIdx;
+      const d = data[closestIdx];
+      const compA = document.getElementById('compA').value || 'A';
+      const compB = document.getElementById('compB').value || 'B';
+      const compC = document.getElementById('compC').value || 'C';
+      infoEl.textContent = `Point ${closestIdx+1}: ${compA} = ${d.a.toFixed(3)}, ${compB} = ${d.b.toFixed(3)}, ${compC} = ${d.c.toFixed(3)}`;
+    } else {
+      selectedPointIndex = null;
+      infoEl.textContent = '';
+    }
+    drawPlot();
+  }
 
   // Download PNG — always exported in light mode, regardless of the current
   // on-screen theme, by rendering a separate off-screen copy of the plot.

@@ -829,7 +829,7 @@
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
     lastX=e.clientX; lastY=e.clientY;
     state.azimuth += dx*0.008;
-    state.elevation = Math.max(-1.5, Math.min(1.5, state.elevation - dy*0.008));
+    state.elevation -= dy*0.008;
     draw();
   });
   canvas.addEventListener('touchstart', (e) => { const t=e.touches[0]; dragging=true; lastX=t.clientX; lastY=t.clientY; }, {passive:true});
@@ -839,7 +839,7 @@
     const dx = t.clientX-lastX, dy = t.clientY-lastY;
     lastX=t.clientX; lastY=t.clientY;
     state.azimuth += dx*0.008;
-    state.elevation = Math.max(-1.5, Math.min(1.5, state.elevation - dy*0.008));
+    state.elevation -= dy*0.008;
     draw();
   }, {passive:true});
   canvas.addEventListener('touchend', () => { dragging=false; });

@@ -8,12 +8,38 @@
   <style>
     :root {
       color-scheme: dark;
+      --bg: #121212;
+      --text: #eee;
+      --header-bg: #1a1a1a;
+      --border: #333;
+      --bar-bg: #181818;
+      --label: #bbb;
+      --input-bg: #1f1f1f;
+      --input-text: #f5f5f5;
+      --input-border: #444;
+      --plot-bg: #000;
+      --footer-text: #888;
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: #f4f5f7;
+      --text: #1a1a1a;
+      --header-bg: #ffffff;
+      --border: #d5d8dd;
+      --bar-bg: #fafafa;
+      --label: #555;
+      --input-bg: #ffffff;
+      --input-text: #111;
+      --input-border: #c4c8ce;
+      --plot-bg: #ffffff;
+      --footer-text: #666;
     }
 
     body {
       margin: 0;
-      background-color: #121212;
-      color: #eee;
+      background-color: var(--bg);
+      color: var(--text);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       display: flex;
       flex-direction: column;
@@ -24,8 +50,18 @@
       padding: 0.75rem 1rem;
       font-size: 1rem;
       font-weight: 600;
-      background-color: #1a1a1a;
-      border-bottom: 1px solid #333;
+      background-color: var(--header-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .theme-btn {
+      padding: 0.3rem 0.7rem;
+      font-size: 0.8rem;
+      white-space: nowrap;
     }
 
     .control-bar {
@@ -33,8 +69,8 @@
       flex-wrap: wrap;
       gap: 0.75rem;
       padding: 0.75rem 1rem;
-      background-color: #181818;
-      border-bottom: 1px solid #333;
+      background-color: var(--bar-bg);
+      border-bottom: 1px solid var(--border);
     }
 
     .control-bar > * {
@@ -52,7 +88,7 @@
 
     .field label {
       font-size: 0.75rem;
-      color: #bbb;
+      color: var(--label);
     }
 
     .field.buttons {
@@ -67,9 +103,9 @@
 
     input,
     button {
-      background-color: #1f1f1f;
-      color: #f5f5f5;
-      border: 1px solid #444;
+      background-color: var(--input-bg);
+      color: var(--input-text);
+      border: 1px solid var(--input-border);
       border-radius: 6px;
       padding: 0.45rem 0.6rem;
       font-size: 0.9rem;
@@ -108,7 +144,7 @@
       max-width: 640px;
       height: 360px;
       border-radius: 4px;
-      background-color: #000;
+      background-color: var(--plot-bg);
     }
 
     @media (min-width: 768px) {
@@ -120,16 +156,17 @@
     .footer {
       padding: 0.5rem 1rem;
       font-size: 0.8rem;
-      color: #888;
+      color: var(--footer-text);
       text-align: right;
-      background-color: #181818;
-      border-top: 1px solid #333;
+      background-color: var(--bar-bg);
+      border-top: 1px solid var(--border);
     }
   </style>
 </head>
 <body>
   <header>
-    Polar Plot
+    <span>Polar Plot</span>
+    <button id="theme-btn" type="button" class="theme-btn" aria-label="Toggle dark/light theme">☀ Light</button>
   </header>
 
   <div class="control-bar">
@@ -169,6 +206,25 @@
   <script>
     const canvas = document.getElementById('plot');
     const ctx = canvas.getContext('2d');
+
+    // UI theme (dark/light). Exported images are always rendered on a white canvas.
+    const CANVAS_THEMES = {
+      dark:  { axis: '#333333', curve: '#00e5ff' },
+      light: { axis: '#bbbbbb', curve: '#0077cc' }
+    };
+    let uiTheme = 'dark';
+    function applyUiTheme(t) {
+      uiTheme = t;
+      document.documentElement.setAttribute('data-theme', t);
+      const btn = document.getElementById('theme-btn');
+      btn.textContent = t === 'dark' ? '☀ Light' : '☾ Dark';
+      btn.title = t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    }
+    (function initTheme() {
+      let saved = null;
+      try { saved = localStorage.getItem('polar-plot-theme'); } catch (e) {}
+      applyUiTheme(saved === 'light' ? 'light' : 'dark');
+    })();
 
     function resizeCanvas() {
       const rect = canvas.getBoundingClientRect();
@@ -241,7 +297,7 @@
       const cy = h / 2;
 
       ctx.save();
-      ctx.strokeStyle = '#333';
+      ctx.strokeStyle = CANVAS_THEMES[uiTheme].axis;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(cx, 0);
@@ -265,7 +321,7 @@
 
     function drawAxesLogical(w, h) {
       ctx.save();
-      ctx.strokeStyle = '#333';
+      ctx.strokeStyle = CANVAS_THEMES[uiTheme].axis;
       ctx.lineWidth = 1 / viewScale;
 
       const axisLength = Math.max(w, h);
@@ -295,7 +351,7 @@
       drawAxesLogical(w, h);
 
       ctx.save();
-      ctx.strokeStyle = '#00e5ff';
+      ctx.strokeStyle = CANVAS_THEMES[uiTheme].curve;
       ctx.lineWidth = 2 / viewScale;
       ctx.beginPath();
 
@@ -319,6 +375,236 @@
 
       ctx.stroke();
       ctx.restore();
+    }
+
+    // ---------- Equation typesetter for the exported image ----------
+    // Parses the expression and lays it out with real fractions, exponents,
+    // radicals and stretchy parentheses. Falls back to plain text if parsing fails.
+    const EQ_FONT = "Georgia, 'Times New Roman', serif";
+    const EQ_FUNCS = ['sin','cos','tan','sec','csc','cot','sqrt','abs','log','log10'];
+
+    function parseEquation(src) {
+      const toks = [];
+      const re = /\s*(?:(\d*\.?\d+)|([A-Za-z_][A-Za-z0-9_.]*)|(\*\*|[-+*\/^(),]))/y;
+      src = src.trim();
+      let i = 0;
+      while (i < src.length) {
+        re.lastIndex = i;
+        const m = re.exec(src);
+        if (!m) throw new Error('bad token');
+        if (m[1] !== undefined) toks.push({ t: 'num', v: m[1] });
+        else if (m[2] !== undefined) {
+          let id = m[2].replace(/^Math\./, '');
+          const low = id.toLowerCase();
+          if (EQ_FUNCS.includes(low) || low === 'pi' || low === 'e') id = low;
+          toks.push({ t: 'id', v: id });
+        } else toks.push({ t: 'op', v: m[3] === '**' ? '^' : m[3] });
+        i = re.lastIndex;
+      }
+      let p = 0;
+      const isOp = (v) => toks[p] && toks[p].t === 'op' && toks[p].v === v;
+      const startsAtom = () => toks[p] && (toks[p].t === 'num' || toks[p].t === 'id' || isOp('('));
+      const expect = (v) => { if (!isOp(v)) throw new Error('expected ' + v); p++; };
+
+      function expr() {
+        let l = term();
+        while (isOp('+') || isOp('-')) { const op = toks[p++].v; l = { k: 'bin', op, l, r: term() }; }
+        return l;
+      }
+      function term() {
+        let l = unary();
+        for (;;) {
+          if (isOp('*') || isOp('/')) { const op = toks[p++].v; l = { k: 'bin', op, l, r: unary() }; }
+          else if (startsAtom()) l = { k: 'imp', l, r: unary() };
+          else return l;
+        }
+      }
+      function unary() {
+        if (isOp('-')) { p++; return { k: 'neg', e: unary() }; }
+        if (isOp('+')) { p++; return unary(); }
+        return power();
+      }
+      function power() {
+        const b = atom();
+        if (isOp('^')) { p++; return { k: 'pow', b, e: unary() }; }
+        return b;
+      }
+      function atom() {
+        const x = toks[p++];
+        if (!x) throw new Error('unexpected end');
+        if (x.t === 'num') return { k: 'num', v: x.v };
+        if (x.t === 'id') {
+          if (isOp('(')) {
+            p++;
+            const args = [];
+            if (!isOp(')')) { args.push(expr()); while (isOp(',')) { p++; args.push(expr()); } }
+            expect(')');
+            return { k: 'call', name: x.v, args };
+          }
+          return { k: 'id', v: x.v };
+        }
+        if (x.v === '(') { const e = expr(); expect(')'); return { k: 'group', e }; }
+        throw new Error('unexpected ' + x.v);
+      }
+      const tree = expr();
+      if (p < toks.length) throw new Error('trailing tokens');
+      return tree;
+    }
+
+    // Box layout: every box has width w, ascent a, descent d and draw(x, baselineY)
+    function buildEquationBox(c, node, size) {
+      const font = (sz, it) => (it ? 'italic ' : '') + sz + 'px ' + EQ_FONT;
+      const txt = (str, sz, it) => {
+        c.font = font(sz, it);
+        const w = c.measureText(str).width;
+        return { w, a: sz * 0.74, d: sz * 0.22, draw: (x, y) => { c.font = font(sz, it); c.fillText(str, x, y); } };
+      };
+      const gap = (w) => ({ w, a: 0, d: 0, draw: () => {} });
+      const hbox = (list) => ({
+        w: list.reduce((s, b) => s + b.w, 0),
+        a: Math.max(0, ...list.map(b => b.a)),
+        d: Math.max(0, ...list.map(b => b.d)),
+        draw: (x, y) => { let cx = x; list.forEach(b => { b.draw(cx, y); cx += b.w; }); }
+      });
+
+      function paren(inner, sz) {
+        if (inner.a + inner.d <= sz * 1.15) return hbox([txt('(', sz), inner, txt(')', sz)]);
+        const pw = sz * 0.3;
+        const a = inner.a + 3, d = inner.d + 3;
+        return {
+          w: inner.w + pw * 2 + 4, a, d,
+          draw: (x, y) => {
+            const top = y - a, bot = y + d, mid = (top + bot) / 2;
+            c.save(); c.lineWidth = Math.max(1, sz / 16); c.lineCap = 'round';
+            c.beginPath(); c.moveTo(x + pw, top); c.quadraticCurveTo(x - pw * 0.3, mid, x + pw, bot); c.stroke();
+            const rx = x + inner.w + pw * 2 + 4 - pw;
+            c.beginPath(); c.moveTo(rx, top); c.quadraticCurveTo(rx + pw * 1.3, mid, rx, bot); c.stroke();
+            c.restore();
+            inner.draw(x + pw + 2, y);
+          }
+        };
+      }
+      function bars(inner, sz) {
+        const a = inner.a + 3, d = inner.d + 3;
+        return {
+          w: inner.w + 10, a, d,
+          draw: (x, y) => {
+            c.save(); c.lineWidth = Math.max(1, sz / 16);
+            c.beginPath();
+            c.moveTo(x + 2, y - a); c.lineTo(x + 2, y + d);
+            c.moveTo(x + inner.w + 8, y - a); c.lineTo(x + inner.w + 8, y + d);
+            c.stroke(); c.restore();
+            inner.draw(x + 5, y);
+          }
+        };
+      }
+      function radical(inner, sz) {
+        const pw = sz * 0.55;
+        const a = inner.a + 6, d = inner.d;
+        return {
+          w: pw + inner.w + 6, a, d,
+          draw: (x, y) => {
+            const top = y - a + 2, bot = y + d, h = bot - top;
+            c.save(); c.lineWidth = Math.max(1, sz / 16); c.lineJoin = 'round';
+            c.beginPath();
+            c.moveTo(x, bot - h * 0.42);
+            c.lineTo(x + pw * 0.28, bot - h * 0.48);
+            c.lineTo(x + pw * 0.55, bot);
+            c.lineTo(x + pw, top);
+            c.lineTo(x + pw + inner.w + 4, top);
+            c.stroke(); c.restore();
+            inner.draw(x + pw + 2, y);
+          }
+        };
+      }
+      function frac(num, den, sz) {
+        const w = Math.max(num.w, den.w) + 8;
+        const axis = sz * 0.3;
+        const numOff = axis + 3 + num.d;          // baseline of numerator above main baseline
+        const denOff = -axis + 3 + den.a;         // baseline of denominator below main baseline
+        return {
+          w, a: numOff + num.a, d: denOff + den.d,
+          draw: (x, y) => {
+            const barY = y - axis;
+            c.save(); c.lineWidth = Math.max(1, sz / 16);
+            c.beginPath(); c.moveTo(x + 1, barY); c.lineTo(x + w - 1, barY); c.stroke(); c.restore();
+            num.draw(x + (w - num.w) / 2, y - numOff);
+            den.draw(x + (w - den.w) / 2, y + denOff);
+          }
+        };
+      }
+      function power(base, exp, sz) {
+        const shift = Math.max(sz * 0.42, base.a * 0.55);
+        return {
+          w: base.w + exp.w + 1, a: Math.max(base.a, shift + exp.a), d: base.d,
+          draw: (x, y) => { base.draw(x, y); exp.draw(x + base.w + 1, y - shift); }
+        };
+      }
+      function unwrap(n) { return n.k === 'group' ? n.e : n; }
+
+      function build(n, sz) {
+        switch (n.k) {
+          case 'num': return txt(n.v, sz, false);
+          case 'id':
+            if (n.v === 'theta') return txt('θ', sz, true);
+            if (n.v === 'pi') return txt('π', sz, false);
+            return txt(n.v, sz, n.v.length === 1);
+          case 'neg': return hbox([txt('−', sz), build(n.e, sz)]);
+          case 'group': return paren(build(n.e, sz), sz);
+          case 'call': {
+            const args = n.args.map(x => build(x, sz));
+            if (n.name === 'sqrt' && args.length === 1) return radical(args[0], sz);
+            if (n.name === 'abs' && args.length === 1) return bars(args[0], sz);
+            const joined = [];
+            args.forEach((b, i) => { if (i) joined.push(txt(', ', sz)); joined.push(b); });
+            const inner = hbox(joined);
+            let label;
+            if (n.name === 'log') label = txt('ln', sz);              // JS Math.log is the natural log
+            else if (n.name === 'log10') {
+              const lg = txt('log', sz), sub = txt('10', sz * 0.62);
+              label = { w: lg.w + sub.w, a: lg.a, d: lg.d + sz * 0.15,
+                        draw: (x, y) => { lg.draw(x, y); sub.draw(x + lg.w, y + sz * 0.18); } };
+            } else label = txt(n.name, sz);
+            return hbox([label, gap(sz * 0.05), paren(inner, sz)]);
+          }
+          case 'pow': return power(build(n.b, sz), build(n.e, sz * 0.68), sz);
+          case 'imp': return hbox([build(n.l, sz), gap(sz * 0.1), build(n.r, sz)]);
+          case 'bin':
+            if (n.op === '+' ) return hbox([build(n.l, sz), txt(' + ', sz), build(n.r, sz)]);
+            if (n.op === '-' ) return hbox([build(n.l, sz), txt(' − ', sz), build(n.r, sz)]);
+            if (n.op === '/' ) return frac(build(unwrap(n.l), sz * 0.92), build(unwrap(n.r), sz * 0.92), sz);
+            // '*': explicit dot only when the right factor is a plain number
+            if (n.r.k === 'num') return hbox([build(n.l, sz), txt('·', sz), build(n.r, sz)]);
+            return hbox([build(n.l, sz), gap(sz * 0.1), build(n.r, sz)]);
+        }
+        throw new Error('unknown node');
+      }
+      return { build, txt, hbox };
+    }
+
+    // Returns a drawable box for "r = <expression>", shrinking to fit maxW
+    function typesetEquation(c, exprText, maxW, size) {
+      c.save();
+      try {
+        const tree = parseEquation(exprText);
+        let sz = size, box;
+        for (let pass = 0; pass < 2; pass++) {
+          const T = buildEquationBox(c, tree, sz);
+          box = T.hbox([T.txt('r', sz, true), T.txt(' = ', sz), T.build(tree, sz)]);
+          if (box.w <= maxW) break;
+          sz = Math.max(12, sz * maxW / box.w);
+        }
+        return box;
+      } catch (err) {
+        // Fallback: plain text
+        const font = size + 'px ' + EQ_FONT;
+        c.font = font;
+        const str = 'r = ' + exprText.trim();
+        return { w: c.measureText(str).width, a: size * 0.74, d: size * 0.22,
+                 draw: (x, y) => { c.font = font; c.fillText(str, x, y); } };
+      } finally {
+        c.restore();
+      }
     }
 
     function exportPolarImage() {
@@ -345,43 +631,48 @@
       const now = new Date();
       const timestampText = now.toLocaleString();  // e.g., "7/29/2026, 7:33:00 PM"
 
-      // Create off-screen light-mode canvas
+      // Create off-screen light-mode canvas (always white, regardless of UI theme)
       const exportCanvas = document.createElement('canvas');
       const exportCtx = exportCanvas.getContext('2d');
 
+      const S = 2;               // 2x resolution for crisp text
       const width = 800;
       const height = 600;
-      exportCanvas.width = width;
-      exportCanvas.height = height;
+      exportCanvas.width = width * S;
+      exportCanvas.height = height * S;
+      exportCtx.scale(S, S);
 
-      // White background [web:106][web:113]
       exportCtx.fillStyle = '#ffffff';
       exportCtx.fillRect(0, 0, width, height);
 
-      // Title at top [web:112][web:115]
+      // Typeset equation title
+      exportCtx.textAlign = 'left';
+      exportCtx.textBaseline = 'alphabetic';
       exportCtx.fillStyle = '#000000';
-      exportCtx.font = '18px system-ui, sans-serif';
-      exportCtx.textAlign = 'center';
-      exportCtx.textBaseline = 'top';
-      exportCtx.fillText(titleText, width / 2, 10);
+      exportCtx.strokeStyle = '#000000';
+      const eqBox = typesetEquation(exportCtx, titleText, width - 80, 28);
+      const eqTop = 18;
+      eqBox.draw(width / 2 - eqBox.w / 2, eqTop + eqBox.a);
+      const headerBottom = eqTop + eqBox.a + eqBox.d + 14;
 
-      // Center plot area below title
+      // Plot area below the equation
+      const plotTop = Math.max(40, headerBottom);
+      const plotBottom = height - 60;
       const cx = width / 2;
-      const cy = height / 2 + 20;
+      const cy = (plotTop + plotBottom) / 2;
 
       // Axes
       exportCtx.strokeStyle = '#cccccc';
       exportCtx.lineWidth = 1;
       exportCtx.beginPath();
-      exportCtx.moveTo(cx, 40);
-      exportCtx.lineTo(cx, height - 60);
+      exportCtx.moveTo(cx, plotTop);
+      exportCtx.lineTo(cx, plotBottom);
       exportCtx.moveTo(40, cy);
       exportCtx.lineTo(width - 40, cy);
       exportCtx.stroke();
 
       // Curve
-      const margin = 60;
-      const baseScale = Math.min((width / 2 - margin), (height / 2 - margin)) / window.lastMaxR;
+      const baseScale = Math.min(width / 2 - 60, (plotBottom - plotTop) / 2 - 10) / window.lastMaxR;
 
       exportCtx.strokeStyle = '#0077cc';
       exportCtx.lineWidth = 2;
@@ -389,11 +680,8 @@
 
       let firstPoint = true;
       for (const p of window.lastPolarPoints) {
-        const theta = p.theta;
-        const r = p.r;
-
-        const x = cx + baseScale * r * Math.cos(theta);
-        const y = cy - baseScale * r * Math.sin(theta);
+        const x = cx + baseScale * p.r * Math.cos(p.theta);
+        const y = cy - baseScale * p.r * Math.sin(p.theta);
 
         if (firstPoint) {
           exportCtx.moveTo(x, y);
@@ -561,6 +849,17 @@
     });
 
     document.getElementById('export-btn').addEventListener('click', exportPolarImage);
+
+    document.getElementById('theme-btn').addEventListener('click', () => {
+      const next = uiTheme === 'dark' ? 'light' : 'dark';
+      applyUiTheme(next);
+      try { localStorage.setItem('polar-plot-theme', next); } catch (e) {}
+      if (window.lastPolarPoints && window.lastMaxR) {
+        renderPolar(window.lastPolarPoints, window.lastMaxR);
+      } else {
+        drawAxes();
+      }
+    });
 
     document.getElementById('clear-btn').addEventListener('click', () => {
       // Reset stored data

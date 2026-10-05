@@ -23,6 +23,28 @@
     --serif:         'Fraunces', 'Fraunhofer', Georgia, 'Times New Roman', serif;
     --mono:          'JetBrains Mono', 'Courier New', ui-monospace, monospace;
     --radius:        3px;
+    --hover:         #232b30;
+    --canvas-bg:     #1b2126;
+    --hint-bg:       rgba(20,24,28,0.55);
+  }
+  :root[data-theme="light"]{
+    --bg:            #f3f0e9;
+    --bg-panel:      #faf8f4;
+    --bg-panel-2:    #f1ede4;
+    --grid-line:     rgba(30, 30, 28, 0.06);
+    --ink:           #1e1e1c;
+    --ink-dim:       #57564f;
+    --ink-faint:     #8a897f;
+    --amber:         #b9770e;
+    --amber-dim:     rgba(185,119,14,0.35);
+    --cyan:          #0e8a8c;
+    --cyan-dim:      rgba(14,138,140,0.35);
+    --rule:          #d6d1c4;
+    --paper-hi:      rgba(255,255,255,0.4);
+    --err:           #c0392b;
+    --hover:         #e8e3d6;
+    --canvas-bg:     #faf8f4;
+    --hint-bg:       rgba(250,248,244,0.75);
   }
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; background:var(--bg); color:var(--ink); font-family:var(--mono); -webkit-font-smoothing:antialiased; }
@@ -37,6 +59,8 @@
   .title-block h1 { font-family:var(--serif); font-weight:600; font-size:clamp(1.3rem, 2.6vw, 1.85rem); letter-spacing:0.2px; margin:0 0 4px 0; color:var(--ink); }
   .title-block h1 em { font-style:italic; color:var(--amber); }
   .title-block .sub { font-size:0.72rem; color:var(--ink-dim); letter-spacing:0.06em; text-transform:uppercase; }
+  .header-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .theme-btn { padding:6px 12px; font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; }
   .eyebrow { font-size:0.68rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-faint); border:1px solid var(--rule); padding:5px 9px; border-radius:var(--radius); white-space:nowrap; }
 
   .panel { background:var(--bg-panel); border:1px solid var(--rule); border-radius:var(--radius); position:relative; }
@@ -73,7 +97,7 @@
     transition:background 0.15s ease, color 0.15s ease;
   }
   .seg button:last-child { border-right:none; }
-  .seg button.active { color:var(--ink); background:#232b30; }
+  .seg button.active { color:var(--ink); background:var(--hover); }
   .seg button:hover { color:var(--ink); }
 
   .eq-group { display:grid; grid-template-columns:1fr; gap:14px; }
@@ -95,7 +119,7 @@
     padding:10px 16px; font-family:var(--mono); font-size:0.78rem; letter-spacing:0.04em; cursor:pointer; white-space:nowrap;
     transition:border-color 0.15s ease, background 0.15s ease;
   }
-  .btn:hover { background:#232b30; }
+  .btn:hover { background:var(--hover); }
   .btn:active { transform:translateY(1px); }
   .btn.amber { border-color:var(--amber-dim); }
   .btn.amber:hover { border-color:var(--amber); }
@@ -108,12 +132,12 @@
 
   .graph-panel { padding:12px; margin-bottom:16px; }
   .canvas-wrap { position:relative; width:100%; touch-action:none; }
-  canvas#glCanvas { width:100%; height:auto; display:block; border-radius:2px; cursor:grab; background:#1b2126; }
+  canvas#glCanvas { width:100%; height:auto; display:block; border-radius:2px; cursor:grab; background:var(--canvas-bg); }
   canvas#glCanvas:active { cursor:grabbing; }
   .hint {
     position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
     font-size:0.66rem; color:var(--ink-faint); letter-spacing:0.05em; text-transform:uppercase;
-    pointer-events:none; background:rgba(20,24,28,0.55); padding:4px 10px; border-radius:12px;
+    pointer-events:none; background:var(--hint-bg); padding:4px 10px; border-radius:12px;
   }
 
   .info-panel { padding:12px 18px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:0.72rem; color:var(--ink-dim); margin-bottom:24px; }
@@ -135,7 +159,10 @@
       <h1>3D Surface <em>Plotter</em></h1>
       <div class="sub">explicit · implicit · parametric · drag or swipe to rotate</div>
     </div>
-    <div class="eyebrow">canvas 2D · custom rasterizer</div>
+    <div class="header-right">
+      <button class="btn theme-btn" id="themeToggle" type="button" aria-label="Toggle dark/light theme">☀ Light</button>
+      <div class="eyebrow">canvas 2D · custom rasterizer</div>
+    </div>
   </header>
 
   <div class="panel eq-panel">
@@ -814,9 +841,30 @@
     draw();
   }
 
+  /* ---- UI theme (dark/light). Exports are always rendered in the light theme. ---- */
+  let uiTheme = 'dark';
+  const themeBtn = document.getElementById('themeToggle');
+  function applyUiTheme(t){
+    uiTheme = t;
+    document.documentElement.setAttribute('data-theme', t);
+    themeBtn.textContent = t === 'dark' ? '☀ Light' : '☾ Dark';
+    themeBtn.title = t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+  }
+  themeBtn.addEventListener('click', () => {
+    const next = uiTheme === 'dark' ? 'light' : 'dark';
+    applyUiTheme(next);
+    try { localStorage.setItem('grapher3d-theme', next); } catch (e) {}
+    draw();
+  });
+  (function initTheme(){
+    let saved = null;
+    try { saved = localStorage.getItem('grapher3d-theme'); } catch (e) {}
+    applyUiTheme(saved === 'light' ? 'light' : 'dark');
+  })();
+
   function draw(){
     ctx.setTransform(DPR,0,0,DPR,0,0);
-    renderFrame(ctx, cssW, cssH, 'dark', state.mesh, state.azimuth, state.elevation, state.zoom, {});
+    renderFrame(ctx, cssW, cssH, uiTheme, state.mesh, state.azimuth, state.elevation, state.zoom, {});
     document.getElementById('infoAz').textContent = (state.azimuth*180/Math.PI).toFixed(0) + '°';
     document.getElementById('infoEl').textContent = (state.elevation*180/Math.PI).toFixed(0) + '°';
   }
@@ -1036,30 +1084,160 @@
 
   function currentEqLines(){
     if (state.mode === 'explicit') return ['z = ' + state.explicit.expr];
-    if (state.mode === 'implicit') return ['F(x,y,z) = ' + state.implicit.expr + ' = 0'];
+    if (state.mode === 'implicit') return ['F(x, y, z) = ' + state.implicit.expr + ' = 0'];
     return [
-      'x = ' + state.parametric.xExpr + ',  y = ' + state.parametric.yExpr,
+      'x = ' + state.parametric.xExpr,
+      'y = ' + state.parametric.yExpr,
       'z = ' + state.parametric.zExpr
     ];
   }
 
+  /* ---- tiny math typesetter for canvas: exponents, √, ·, π, italic variables ---- */
+  function balancedGroup(str, i){            // str[i] === '(' → returns index of matching ')'
+    let depth = 0;
+    for (let k = i; k < str.length; k++){
+      if (str[k] === '(') depth++;
+      else if (str[k] === ')'){ depth--; if (depth === 0) return k; }
+    }
+    return -1;                               // unbalanced: caller falls back to plain text
+  }
+
+  function parseMath(str){
+    const nodes = [];
+    let buf = '';
+    const flush = () => { if (buf){ nodes.push({ t:'text', v:buf }); buf = ''; } };
+    let i = 0;
+    while (i < str.length){
+      const ch = str[i];
+      if (ch === '^'){
+        flush();
+        let j = i + 1, inner = '';
+        while (str[j] === ' ') j++;
+        if (str[j] === '('){
+          const end = balancedGroup(str, j);
+          if (end > 0){ inner = str.slice(j + 1, end); j = end + 1; }
+        }
+        if (!inner){
+          const m = /^[-+]?[A-Za-z0-9.]+/.exec(str.slice(j));
+          if (m){ inner = m[0]; j += m[0].length; }
+        }
+        if (inner){ nodes.push({ t:'sup', kids: parseMath(inner) }); i = j; continue; }
+        buf += ch; i++; continue;
+      }
+      if (str.startsWith('sqrt', i) && /^\s*\(/.test(str.slice(i + 4))){
+        const open = str.indexOf('(', i + 4);
+        const end = balancedGroup(str, open);
+        if (end > 0){
+          flush();
+          nodes.push({ t:'sqrt', kids: parseMath(str.slice(open + 1, end)) });
+          i = end + 1; continue;
+        }
+      }
+      buf += ch; i++;
+    }
+    flush();
+    return nodes;
+  }
+
+  // Split plain text into runs: single-letter variables italic, function names upright
+  function spaceOperators(v, first){
+    let out = '';
+    for (let i = 0; i < v.length; i++){
+      const ch = v[i];
+      if (ch === '+' || ch === '-'){
+        const prev = out.trimEnd().slice(-1);
+        const sym = ch === '-' ? '−' : '+';
+        const unary = (prev === '' && first) || /[(,=·^\/]/.test(prev);
+        if (unary){ out = out.trimEnd() + sym; }
+        else { out = out.trimEnd() + ' ' + sym + ' '; }
+        while (v[i + 1] === ' ') i++;
+      } else out += ch;
+    }
+    return out.replace(/ {2,}/g, ' ');
+  }
+
+  function textRuns(v, first){
+    v = v.replace(/\*/g, '·')
+         .replace(/\bpi\b/g, 'π').replace(/\btheta\b/g, 'θ').replace(/\bphi\b/g, 'φ');
+    v = spaceOperators(v, first);
+    const runs = [];
+    v.split(/([A-Za-z]+)/).forEach(part => {
+      if (!part) return;
+      const isWord = /^[A-Za-z]+$/.test(part);
+      runs.push({ v: part, italic: isWord && part.length === 1 });
+    });
+    return runs;
+  }
+
+  const MATH_SERIF = "Georgia, 'Times New Roman', serif";
+  function mathFont(size, italic){ return (italic ? 'italic ' : '') + size + 'px ' + MATH_SERIF; }
+
+  // Measure or draw a node list. Returns width. draw=false → measure only.
+  function layoutMath(ectx, nodes, x, y, size, draw){
+    let cx = x;
+    nodes.forEach((n, ni) => {
+      if (n.t === 'text'){
+        textRuns(n.v, ni === 0).forEach(r => {
+          ectx.font = mathFont(size, r.italic);
+          const w = ectx.measureText(r.v).width;
+          if (draw) ectx.fillText(r.v, cx, y);
+          cx += w;
+        });
+      } else if (n.t === 'sup'){
+        const w = layoutMath(ectx, n.kids, cx + 1, y - size * 0.42, size * 0.7, draw);
+        cx += w + 2;
+      } else if (n.t === 'sqrt'){
+        ectx.font = mathFont(size, false);
+        const rw = ectx.measureText('√').width;
+        const kw = layoutMath(ectx, n.kids, cx + rw + 2, y, size, false);
+        if (draw){
+          ectx.font = mathFont(size, false);
+          ectx.fillText('√', cx, y);
+          ectx.beginPath();
+          ectx.lineWidth = Math.max(1, size / 18);
+          ectx.moveTo(cx + rw - 1, y - size * 0.86);
+          ectx.lineTo(cx + rw + 3 + kw, y - size * 0.86);
+          ectx.stroke();
+          layoutMath(ectx, n.kids, cx + rw + 2, y, size, true);
+        }
+        cx += rw + kw + 5;
+      }
+    });
+    return cx - x;
+  }
+
+  const EQ_SIZE = 24, EQ_LINE_H = 36, EQ_TOP = 84;
+  function headerBottomFor(lines){ return EQ_TOP + (lines.length - 1) * EQ_LINE_H + 26; }
+
   function drawExportHeader(ectx, theme){
     const T = THEMES[theme];
+    ectx.save();
     ectx.fillStyle = T.textStrong;
     ectx.font = "italic 600 26px Fraunces, Georgia, serif";
     ectx.textAlign = 'center';
+    ectx.textBaseline = 'alphabetic';
     ectx.fillText('3D surface Graph', EXPORT_W/2, 44);
-    ectx.fillStyle = T.text;
-    ectx.font = '15px JetBrains Mono, monospace';
+
     const lines = currentEqLines();
-    lines.forEach((line, i) => ectx.fillText(line, EXPORT_W/2, 70 + i*20));
-    return 70 + lines.length*20 + 14;
+    ectx.textAlign = 'left';
+    ectx.fillStyle = T.textStrong;
+    ectx.strokeStyle = T.textStrong;
+    lines.forEach((line, i) => {
+      const nodes = parseMath(line);
+      let size = EQ_SIZE;
+      let w = layoutMath(ectx, nodes, 0, 0, size, false);
+      const maxW = EXPORT_W - 120;
+      if (w > maxW){ size = Math.max(12, size * maxW / w); w = layoutMath(ectx, nodes, 0, 0, size, false); }
+      layoutMath(ectx, nodes, (EXPORT_W - w) / 2, EQ_TOP + i * EQ_LINE_H, size, true);
+    });
+    ectx.restore();
+    return headerBottomFor(lines);
   }
 
   document.getElementById('exportPngBtn').addEventListener('click', () => {
     exportCanvas.width = EXPORT_W; exportCanvas.height = EXPORT_H;
     const ectx = exportCanvas.getContext('2d');
-    const headerBottom = 70 + currentEqLines().length*20 + 14;
+    const headerBottom = headerBottomFor(currentEqLines());
     renderFrame(ectx, EXPORT_W, EXPORT_H, 'light', state.mesh, state.azimuth, state.elevation, state.zoom, { topMargin: headerBottom });
     drawExportHeader(ectx, 'light');
 
@@ -1094,7 +1272,7 @@
     const startAzimuth = state.azimuth;
     const fixedElevation = state.elevation;
     const fixedZoom = state.zoom;
-    const headerBottom = 70 + currentEqLines().length*20 + 14;
+    const headerBottom = headerBottomFor(currentEqLines());
 
     const stream = exportCanvas.captureStream(FPS);
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);

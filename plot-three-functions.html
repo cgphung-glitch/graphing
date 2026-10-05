@@ -22,6 +22,20 @@
       --f3-color: #facc15; /* Yellow */
       --accent: #6366f1;
       --accent-hover: #4f46e5;
+      --canvas-bg: #020617;
+    }
+
+    :root[data-theme="light"] {
+      --bg-color: #f1f5f9;
+      --card-bg: #ffffff;
+      --input-bg: #f1f5f9;
+      --border-color: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --f1-color: #0284c7;
+      --f2-color: #db2777;
+      --f3-color: #ca8a04;
+      --canvas-bg: #ffffff;
     }
 
     * {
@@ -43,6 +57,29 @@
     .header {
       text-align: center;
       margin-bottom: 16px;
+      position: relative;
+    }
+
+    .theme-toggle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border-color);
+      background: var(--card-bg);
+      color: var(--text-main);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s, border-color 0.2s;
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--accent);
     }
 
     .header h1 {
@@ -183,6 +220,8 @@
     }
 
     .bound-item input {
+      width: 100%;
+      min-width: 0;
       background-color: var(--input-bg);
       border: 1px solid var(--border-color);
       color: var(--text-main);
@@ -194,7 +233,8 @@
 
     .toggle-group {
       display: flex;
-      gap: 16px;
+      flex-wrap: wrap;
+      gap: 8px 14px;
       margin-top: 8px;
     }
 
@@ -205,6 +245,7 @@
       font-size: 0.8rem;
       color: var(--text-main);
       cursor: pointer;
+      white-space: nowrap;
     }
 
     .checkbox-label input {
@@ -265,7 +306,7 @@
       position: relative;
       width: 100%;
       aspect-ratio: 1 / 1;
-      background-color: #020617;
+      background-color: var(--canvas-bg);
       border-radius: 12px;
       overflow: hidden;
       border: 1px solid var(--border-color);
@@ -328,6 +369,9 @@
 <body>
 
   <div class="header">
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Switch to light theme" aria-label="Toggle dark/light theme">
+      <i class="fa-solid fa-sun" id="theme-icon"></i>
+    </button>
     <h1>Function Plotter</h1>
     <p>Compare equations in Cartesian, Parametric, and Polar modes</p>
   </div>
@@ -420,6 +464,9 @@
           <label class="checkbox-label">
             <input type="checkbox" id="chk-intersections" checked onchange="draw()"> Intersections
           </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-equations" checked onchange="draw()"> Equations
+          </label>
         </div>
 
         <!-- Actions -->
@@ -444,7 +491,7 @@
       <div class="inspector-card">
         <div class="inspector-title">Cursor Readout</div>
         <div class="inspector-values">
-          <div class="val-item">Pos: <span id="readout-pos" style="color: #fff;">(-, -)</span></div>
+          <div class="val-item">Pos: <span id="readout-pos" style="color: var(--text-main);">(-, -)</span></div>
           <div class="val-item"><span class="val-badge f1-indicator"></span><span id="readout-f1">-</span></div>
           <div class="val-item"><span class="val-badge f2-indicator"></span><span id="readout-f2">-</span></div>
           <div class="val-item"><span class="val-badge f3-indicator"></span><span id="readout-f3">-</span></div>
@@ -458,18 +505,28 @@
     let currentMode = 'cartesian'; // 'cartesian', 'parametric', 'polar'
     let hoverPos = null; // {x, y} in graph coordinates
 
-    // Color definitions
-    const COLORS = {
-      f1: '#38bdf8',
-      f2: '#f472b6',
-      f3: '#facc15',
-      root: '#22c55e',
-      intersection: '#a855f7'
+    // Theme palettes (canvas colors). Export always uses THEMES.light.
+    const THEMES = {
+      dark: {
+        bg: '#020617', grid: '#1e293b', axis: '#f8fafc', label: '#64748b',
+        f1: '#38bdf8', f2: '#f472b6', f3: '#facc15',
+        root: '#22c55e', intersection: '#a855f7',
+        crosshair: 'rgba(255, 255, 255, 0.3)',
+        legendBg: 'rgba(15, 23, 42, 0.85)', legendBorder: '#475569', legendText: '#f8fafc'
+      },
+      light: {
+        bg: '#ffffff', grid: '#e2e8f0', axis: '#0f172a', label: '#64748b',
+        f1: '#0284c7', f2: '#db2777', f3: '#ca8a04',
+        root: '#16a34a', intersection: '#9333ea',
+        crosshair: 'rgba(15, 23, 42, 0.3)',
+        legendBg: 'rgba(255, 255, 255, 0.92)', legendBorder: '#cbd5e1', legendText: '#0f172a'
+      }
     };
+    let pal = THEMES.dark;
 
     // Canvas setup
     const canvas = document.getElementById('graphCanvas');
-    const ctx = canvas.getContext('2d');
+    let ctx = canvas.getContext('2d'); // temporarily swapped to an offscreen context during export
     const container = document.getElementById('canvas-container');
 
     function resizeCanvas() {
@@ -482,6 +539,97 @@
     }
 
     window.addEventListener('resize', resizeCanvas);
+
+    // Theme handling
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      pal = THEMES[theme];
+      const icon = document.getElementById('theme-icon');
+      const btn = document.getElementById('theme-toggle');
+      // Icon shows the theme you will switch TO
+      icon.className = theme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+      btn.title = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    }
+
+    function toggleTheme() {
+      const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      applyTheme(next);
+      try { localStorage.setItem('plotter-theme', next); } catch (e) {}
+      draw();
+    }
+
+    // Equation text helpers
+    const SUBS = ['₁', '₂', '₃'];
+    const SUPS = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+    function prettyExpr(str) {
+      return str.trim()
+        .replace(/\btheta\b/g, 'θ')
+        .replace(/\bpi\b/g, 'π')
+        .replace(/\^(\d)(?!\d|\.)/g, (m, d) => SUPS[d])
+        .replace(/\s*\*\s*/g, '·')
+        .replace(/\s+-\s+/g, ' − ')
+        .replace(/\s+/g, ' ');
+    }
+
+    // Build [{text, color}] for the current mode (skips empty inputs)
+    function getEquations(p) {
+      const items = [];
+      ['f1', 'f2', 'f3'].forEach((key, i) => {
+        const a = document.getElementById(`input-${key}-a`).value.trim();
+        const b = document.getElementById(`input-${key}-b`).value.trim();
+        const n = SUBS[i];
+        let text = null;
+        if (currentMode === 'cartesian' && a) text = `y${n} = ${prettyExpr(a)}`;
+        else if (currentMode === 'parametric' && a && b) text = `x${n}(t) = ${prettyExpr(a)},   y${n}(t) = ${prettyExpr(b)}`;
+        else if (currentMode === 'polar' && a) text = `r${n}(θ) = ${prettyExpr(a)}`;
+        if (text) items.push({ text, color: p[key] });
+      });
+      return items;
+    }
+
+    // Legend box listing the equations. opts: {fixedWidth, bg}
+    function drawLegend(c, x, y, items, p, baseFont, maxWidth, opts = {}) {
+      if (!items.length) return;
+      const pad = 10, swatch = 22, gap = 10;
+      let font = baseFont;
+      const measure = (f) => {
+        c.font = `${f}px monospace`;
+        return Math.max(...items.map(it => c.measureText(it.text).width));
+      };
+      let textW = measure(font);
+      const avail = (opts.fixedWidth || maxWidth) - pad * 2 - swatch - gap;
+      while (textW > avail && font > 9) { font -= 1; textW = measure(font); }
+
+      const rowH = Math.round(font * 1.7);
+      const boxW = opts.fixedWidth || (pad * 2 + swatch + gap + textW);
+      const boxH = pad * 2 + rowH * items.length - (rowH - font) + 2;
+
+      c.save();
+      c.fillStyle = opts.bg || p.legendBg;
+      c.strokeStyle = p.legendBorder;
+      c.lineWidth = 1;
+      c.beginPath();
+      c.roundRect(x, y, boxW, boxH, 8);
+      c.fill();
+      c.stroke();
+
+      c.font = `${font}px monospace`;
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      items.forEach((it, i) => {
+        const cy = y + pad + font / 2 + i * rowH + 1;
+        c.strokeStyle = it.color;
+        c.lineWidth = 3;
+        c.lineCap = 'round';
+        c.beginPath();
+        c.moveTo(x + pad, cy);
+        c.lineTo(x + pad + swatch, cy);
+        c.stroke();
+        c.fillStyle = p.legendText;
+        c.fillText(it.text, x + pad + swatch + gap, cy);
+      });
+      c.restore();
+    }
 
     // Set Active Plot Mode
     function setMode(mode) {
@@ -575,11 +723,29 @@
       }
     }
 
-    // Main Draw Function
+    // On-screen draw
     function draw() {
       const rect = container.getBoundingClientRect();
-      const width = rect.width;
-      const height = rect.height;
+      render(ctx, rect.width, rect.height, pal, { live: true });
+    }
+
+    // Renders the full scene into any 2D context (screen or export).
+    // opts.live: use hover state + update cursor readouts; opts.equations: overlay legend
+    function render(target, width, height, p, opts = {}) {
+      const prevCtx = ctx;
+      const prevPal = pal;
+      ctx = target;   // plot helpers draw through the global ctx
+      pal = p;
+      try {
+        renderScene(width, height, opts);
+      } finally {
+        ctx = prevCtx;
+        pal = prevPal;
+      }
+    }
+
+    function renderScene(width, height, opts) {
+      const hover = opts.live ? hoverPos : null;
 
       const xMin = parseFloat(document.getElementById('xMin').value) || -10;
       const xMax = parseFloat(document.getElementById('xMax').value) || 10;
@@ -587,7 +753,7 @@
       const yMax = parseFloat(document.getElementById('yMax').value) || 10;
 
       // Clear Canvas
-      ctx.fillStyle = '#020617';
+      ctx.fillStyle = pal.bg;
       ctx.fillRect(0, 0, width, height);
 
       // Coordinate Transform Helpers
@@ -602,6 +768,7 @@
       // Fetch & Compile Functions
       const showRoots = document.getElementById('chk-roots').checked;
       const showIntersections = document.getElementById('chk-intersections').checked;
+      const showEquations = opts.live && document.getElementById('chk-equations').checked;
 
       if (currentMode === 'cartesian') {
         const fn1 = compileExpression(document.getElementById('input-f1-a').value);
@@ -609,9 +776,9 @@
         const fn3 = compileExpression(document.getElementById('input-f3-a').value);
 
         const fns = [
-          { fn: fn1, color: COLORS.f1, name: 'f1' },
-          { fn: fn2, color: COLORS.f2, name: 'f2' },
-          { fn: fn3, color: COLORS.f3, name: 'f3' }
+          { fn: fn1, color: pal.f1, name: 'f1' },
+          { fn: fn2, color: pal.f2, name: 'f2' },
+          { fn: fn3, color: pal.f3, name: 'f3' }
         ];
 
         // Plot curves
@@ -624,9 +791,9 @@
         if (showIntersections) findAndDrawIntersectionsCartesian(fns.map(f => f.fn), xMin, xMax, toScreenX, toScreenY);
 
         // Update Readout if hover exists
-        if (hoverPos) {
-          const mx = toMathX(hoverPos.x);
-          document.getElementById('readout-pos').innerText = `(${mx.toFixed(2)}, ${toMathY(hoverPos.y).toFixed(2)})`;
+        if (hover) {
+          const mx = toMathX(hover.x);
+          document.getElementById('readout-pos').innerText = `(${mx.toFixed(2)}, ${toMathY(hover.y).toFixed(2)})`;
           document.getElementById('readout-f1').innerText = fn1 ? fn1({x: mx}).toFixed(2) : '-';
           document.getElementById('readout-f2').innerText = fn2 ? fn2({x: mx}).toFixed(2) : '-';
           document.getElementById('readout-f3').innerText = fn3 ? fn3({x: mx}).toFixed(2) : '-';
@@ -640,17 +807,17 @@
           {
             xFn: compileExpression(document.getElementById('input-f1-a').value),
             yFn: compileExpression(document.getElementById('input-f1-b').value),
-            color: COLORS.f1
+            color: pal.f1
           },
           {
             xFn: compileExpression(document.getElementById('input-f2-a').value),
             yFn: compileExpression(document.getElementById('input-f2-b').value),
-            color: COLORS.f2
+            color: pal.f2
           },
           {
             xFn: compileExpression(document.getElementById('input-f3-a').value),
             yFn: compileExpression(document.getElementById('input-f3-b').value),
-            color: COLORS.f3
+            color: pal.f3
           }
         ];
 
@@ -658,9 +825,9 @@
           if (c.xFn && c.yFn) plotParametric(c.xFn, c.yFn, pMin, pMax, c.color, toScreenX, toScreenY);
         });
 
-        if (hoverPos) {
-          const mx = toMathX(hoverPos.x);
-          const my = toMathY(hoverPos.y);
+        if (hover) {
+          const mx = toMathX(hover.x);
+          const my = toMathY(hover.y);
           document.getElementById('readout-pos').innerText = `(${mx.toFixed(2)}, ${my.toFixed(2)})`;
           document.getElementById('readout-f1').innerText = 'Active';
           document.getElementById('readout-f2').innerText = 'Active';
@@ -672,18 +839,18 @@
         const pMax = parseFloat(document.getElementById('pMax').value) || 12.566;
 
         const rFns = [
-          { fn: compileExpression(document.getElementById('input-f1-a').value), color: COLORS.f1 },
-          { fn: compileExpression(document.getElementById('input-f2-a').value), color: COLORS.f2 },
-          { fn: compileExpression(document.getElementById('input-f3-a').value), color: COLORS.f3 }
+          { fn: compileExpression(document.getElementById('input-f1-a').value), color: pal.f1 },
+          { fn: compileExpression(document.getElementById('input-f2-a').value), color: pal.f2 },
+          { fn: compileExpression(document.getElementById('input-f3-a').value), color: pal.f3 }
         ];
 
         rFns.forEach(item => {
           if (item.fn) plotPolar(item.fn, pMin, pMax, item.color, toScreenX, toScreenY);
         });
 
-        if (hoverPos) {
-          const mx = toMathX(hoverPos.x);
-          const my = toMathY(hoverPos.y);
+        if (hover) {
+          const mx = toMathX(hover.x);
+          const my = toMathY(hover.y);
           document.getElementById('readout-pos').innerText = `(${mx.toFixed(2)}, ${my.toFixed(2)})`;
           document.getElementById('readout-f1').innerText = 'Active';
           document.getElementById('readout-f2').innerText = 'Active';
@@ -691,15 +858,21 @@
         }
       }
 
+      // Equation legend overlay (on-screen only; export has its own legend)
+      if (showEquations) {
+        drawLegend(ctx, 10, 10, getEquations(pal), pal, width < 480 ? 11 : 13, width - 20);
+      }
+
       // Draw Cursor Crosshairs
-      if (hoverPos) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      if (hover) {
+        ctx.strokeStyle = pal.crosshair;
+        ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        ctx.moveTo(hoverPos.x, 0);
-        ctx.lineTo(hoverPos.x, height);
-        ctx.moveTo(0, hoverPos.y);
-        ctx.lineTo(width, hoverPos.y);
+        ctx.moveTo(hover.x, 0);
+        ctx.lineTo(hover.x, height);
+        ctx.moveTo(0, hover.y);
+        ctx.lineTo(width, hover.y);
         ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -707,7 +880,7 @@
 
     // Grid Drawing
     function drawGrid(width, height, xMin, xMax, yMin, yMax, toScreenX, toScreenY) {
-      ctx.strokeStyle = '#1e293b';
+      ctx.strokeStyle = pal.grid;
       ctx.lineWidth = 1;
 
       // Vertical Grid Lines
@@ -724,7 +897,7 @@
 
         // Label
         if (Math.abs(x) > 0.0001) {
-          ctx.fillStyle = '#64748b';
+          ctx.fillStyle = pal.label;
           ctx.font = '10px monospace';
           ctx.fillText(x.toFixed(1).replace(/\.0$/, ''), sx + 2, toScreenY(0) - 4);
         }
@@ -743,14 +916,14 @@
         ctx.stroke();
 
         if (Math.abs(y) > 0.0001) {
-          ctx.fillStyle = '#64748b';
+          ctx.fillStyle = pal.label;
           ctx.font = '10px monospace';
           ctx.fillText(y.toFixed(1).replace(/\.0$/, ''), toScreenX(0) + 4, sy - 2);
         }
       }
 
       // Main Axes
-      ctx.strokeStyle = '#f8fafc';
+      ctx.strokeStyle = pal.axis;
       ctx.lineWidth = 1.5;
 
       // X Axis
@@ -775,9 +948,9 @@
       ctx.beginPath();
 
       let started = false;
-      const steps = width; // 1 step per pixel column
+      const steps = Math.ceil(width); // ~1 step per pixel column
       for (let i = 0; i <= steps; i++) {
-        const px = i;
+        const px = (i / steps) * width;
         const x = xMin + (i / steps) * (xMax - xMin);
         const y = fn({ x });
 
@@ -882,7 +1055,7 @@
             }
 
             // Draw Root Marker
-            ctx.fillStyle = COLORS.root;
+            ctx.fillStyle = pal.root;
             ctx.beginPath();
             ctx.arc(toScreenX(rmid), toScreenY(0), 4, 0, Math.PI * 2);
             ctx.fill();
@@ -920,7 +1093,7 @@
             }
 
             const iy = fA({ x: rmid });
-            ctx.fillStyle = COLORS.intersection;
+            ctx.fillStyle = pal.intersection;
             ctx.beginPath();
             ctx.arc(toScreenX(rmid), toScreenY(iy), 4, 0, Math.PI * 2);
             ctx.fill();
@@ -956,70 +1129,49 @@
     });
     canvas.addEventListener('touchend', handlePointerLeave);
 
-    // PNG Export Engine
+    // PNG Export Engine — always renders on a light (white) canvas, regardless of UI theme
     function exportGraph() {
+      const L = THEMES.light;
+      const S = 2;                    // 2x for crisp output
+      const W = 1200, H = 900;
       const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = W * S;
+      exportCanvas.height = H * S;
       const eCtx = exportCanvas.getContext('2d');
-      exportCanvas.width = 1200;
-      exportCanvas.height = 900;
+      eCtx.scale(S, S);
 
-      // Background
-      eCtx.fillStyle = '#0f172a';
-      eCtx.fillRect(0, 0, 1200, 900);
+      // Page background
+      eCtx.fillStyle = '#ffffff';
+      eCtx.fillRect(0, 0, W, H);
 
       // Title
-      eCtx.fillStyle = '#f8fafc';
-      eCtx.font = 'bold 32px -apple-system, sans-serif';
+      eCtx.fillStyle = '#0f172a';
+      eCtx.font = 'bold 32px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif';
       eCtx.textAlign = 'center';
-      eCtx.fillText('Comparing three functions', 600, 50);
+      eCtx.textBaseline = 'alphabetic';
+      eCtx.fillText('Comparing three functions', W / 2, 50);
 
       // Subtitle Mode
-      eCtx.fillStyle = '#94a3b8';
-      eCtx.font = '18px sans-serif';
-      eCtx.fillText(`Mode: ${currentMode.toUpperCase()}`, 600, 80);
+      eCtx.fillStyle = '#64748b';
+      eCtx.font = '18px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif';
+      eCtx.fillText(`Mode: ${currentMode.toUpperCase()}`, W / 2, 80);
 
-      // Copy Main Plot View
-      eCtx.drawImage(canvas, 100, 110, 1000, 680);
-
-      // Draw Legend Box at Bottom
-      eCtx.fillStyle = '#1e293b';
-      eCtx.strokeStyle = '#475569';
+      // Plot — rendered natively at export size (no stretching of the on-screen canvas)
+      const px = 100, py = 105, pw = 1000, ph = 600;
+      eCtx.save();
+      eCtx.translate(px, py);
+      eCtx.beginPath();
+      eCtx.rect(0, 0, pw, ph);
+      eCtx.clip();
+      render(eCtx, pw, ph, L, { live: false });
+      eCtx.restore();
+      eCtx.strokeStyle = L.legendBorder;
       eCtx.lineWidth = 1;
-      eCtx.roundRect(100, 810, 1000, 60, 8);
-      eCtx.fill();
-      eCtx.stroke();
+      eCtx.strokeRect(px, py, pw, ph);
 
-      // Legend Content
-      const getExprText = (idA, idB) => {
-        const a = document.getElementById(idA).value;
-        const b = document.getElementById(idB).value;
-        return b ? `(${a}, ${b})` : a;
-      };
-
-      const leg1 = getExprText('input-f1-a', 'input-f1-b');
-      const leg2 = getExprText('input-f2-a', 'input-f2-b');
-      const leg3 = getExprText('input-f3-a', 'input-f3-b');
-
-      eCtx.font = '16px monospace';
+      // Equations legend below the plot
       eCtx.textAlign = 'left';
-
-      // Item 1
-      eCtx.fillStyle = COLORS.f1;
-      eCtx.beginPath(); eCtx.arc(130, 840, 6, 0, Math.PI * 2); eCtx.fill();
-      eCtx.fillStyle = '#f8fafc';
-      eCtx.fillText(`f1: ${leg1}`, 145, 845);
-
-      // Item 2
-      eCtx.fillStyle = COLORS.f2;
-      eCtx.beginPath(); eCtx.arc(450, 840, 6, 0, Math.PI * 2); eCtx.fill();
-      eCtx.fillStyle = '#f8fafc';
-      eCtx.fillText(`f2: ${leg2}`, 465, 845);
-
-      // Item 3
-      eCtx.fillStyle = COLORS.f3;
-      eCtx.beginPath(); eCtx.arc(770, 840, 6, 0, Math.PI * 2); eCtx.fill();
-      eCtx.fillStyle = '#f8fafc';
-      eCtx.fillText(`f3: ${leg3}`, 785, 845);
+      drawLegend(eCtx, px, py + ph + 20, getEquations(L), L, 20, pw, { fixedWidth: pw, bg: '#f8fafc' });
 
       // Download
       const link = document.createElement('a');
@@ -1030,6 +1182,9 @@
 
     // Initial Load
     window.onload = () => {
+      let saved = null;
+      try { saved = localStorage.getItem('plotter-theme'); } catch (e) {}
+      applyTheme(saved === 'light' ? 'light' : 'dark');
       resizeCanvas();
     };
   </script>
